@@ -1,85 +1,70 @@
-<div align="center"><a href="https://github.com/Safouene1/support-palestine-banner/blob/master/Markdown-pages/Support.md"><img src="https://raw.githubusercontent.com/Safouene1/support-palestine-banner/master/banner-support.svg" alt="Support Palestine" style="width: 100%;"></a></div>
+<div align="center">
 
-# ![Obtainium Icon](./assets/graphics/icon_small.png) Obtainium
+<img src="assets/graphics/icon.png" width="120" alt="白い熊 獲得 icon" />
 
-Get Android app updates straight from the source.
+# 白い熊 獲得
 
-Obtainium allows you to install and update apps directly from their releases pages, and receive notifications when new releases are made available.
+**Get app updates straight from the source — in black and yellow.**
 
-More info:
-- [Obtainium Wiki](https://wiki.obtainium.imranr.dev/) ([repository](https://github.com/ImranR98/Obtainium-Wiki))
-- [Obtainium 101](https://www.youtube.com/watch?v=0MF_v2OBncw) - Tutorial video
-- ["Verified Apps"](https://github.com/privacyguides/verified-apps-android) - App verification tool (recommended, integrates with Obtainium)
-- [apps.obtainium.imranr.dev](https://apps.obtainium.imranr.dev/) - Crowdsourced app configurations ([repository](https://github.com/ImranR98/apps.obtainium.imranr.dev))
-- [Side Of Burritos - You should use this instead of F-Droid | How to use app RSS feed](https://youtu.be/FFz57zNR_M0) - Original motivation for this app
-- [Website](https://obtainium.imranr.dev) ([repository](https://github.com/ImranR98/obtainium.imranr.dev))
+A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with a **fully configurable
+black-yellow UI**: a granular 白い熊 獲得 UI theming page (colours, fonts, borders, sizes — all
+live-previewed), a tightened edge-to-edge main screen, and house-styled action buttons.
 
-Currently supported App sources:
-- Open Source - General:
-  - [GitHub](https://github.com/)
-  - [GitLab](https://gitlab.com/)
-  - [Forgejo](https://forgejo.org/) ([Codeberg](https://codeberg.org/))
-  - [F-Droid](https://f-droid.org/)
-  - Third Party F-Droid Repos
-  - [IzzyOnDroid](https://android.izzysoft.de/)
-  - [SourceHut](https://git.sr.ht/)
-- Other - General:
-  - [APKPure](https://apkpure.net/)
-  - [Aptoide](https://aptoide.com/)
-  - [Uptodown](https://uptodown.com/)
-  - [itch.io](https://itch.io/)
-  - [Huawei AppGallery](https://appgallery.huawei.com/)
-  - [Tencent App Store](https://sj.qq.com/)
-  - [vivo App Store (CN)](https://h5.appstore.vivo.com.cn/)
-  - [RuStore](https://rustore.ru/)
-  - [Farsroid](https://www.farsroid.com)
-  - [Samsung Galaxy Store](https://galaxystore.samsung.com/)
-  - [LiteAPKs](https://liteapks.com/)
-  - [APK4Free](https://apk4free.net/)
-  - [CoolApk](https://coolapk.com/)
-  - [SourceForge](https://sourceforge.net/)
-  - Jenkins Jobs
-  - [APKMirror](https://apkmirror.com/) *(Track-Only)*
-  - [APKCombo](https://apkcombo.com/)
-  - [RockMods](https://rockmods.net/) *(Track-Only)*
-- Other - App-Specific:
-  - [Telegram App](https://telegram.org/)
-  - [Neutron Code](https://neutroncode.com/)
-- Direct APK Link
-- "HTML" (Fallback): Any other URL that returns an HTML page with links to APK files
+Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-## Finding App Configurations
+**📥 Latest release: [`1.6.9+6`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
-You can find crowdsourced app configurations at [apps.obtainium.imranr.dev](https://apps.obtainium.imranr.dev).
+</div>
 
-If you can't find the configuration for an app you want, feel free to leave a request on the [issues page](https://github.com/ImranR98/apps.obtainium.imranr.dev/issues).
+---
 
-Or, contribute some configurations to the website by creating a PR at [this repo](https://github.com/ImranR98/apps.obtainium.imranr.dev).
+## 🎨 白い熊 獲得 UI — granular theming page
+A dedicated theming screen in the sister-repo house style, reached from the top of Settings **or by
+long-pressing the Settings cog** on the main screen. Big bold underlined section headings, deeply
+indented rows, and tight spacing so the hierarchy reads instantly. **Everything previews live** — the
+whole app (and the page itself) restyles as you drag. One-tap reset to the black-yellow defaults.
 
-## Installation
+## 🌈 RGBA colour pickers with preset boxes
+Twelve colour slots (background, surface, text, secondary text, accent, borders, icons, top bar,
+action buttons). Each picker has **four R/G/B/A sliders (0–255)**, an old→new preview with a
+checkerboard behind translucent colours, and a row of **one-click recent-colour boxes** — shared
+across every picker, persisted, and prefilled with the house palette.
 
-[<img src="https://github.com/machiav3lli/oandbackupx/blob/034b226cea5c1b30eb4f6a6f313e4dadcbb0ece4/badge_github.png"
-    alt="Get it on GitHub"
-    height="80">](https://github.com/ImranR98/Obtainium/releases)
-[<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"
-     alt="Get it on IzzyOnDroid"
-     height="80">](https://apt.izzysoft.de/fdroid/index/apk/dev.imranr.obtainium)
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
-    alt="Get it on F-Droid"
-    height="80">](https://f-droid.org/packages/dev.imranr.obtainium.fdroid/)
-     
-Verification info:
+## 🔤 External fonts, rendered in their own glyphs
+Import any `.ttf`/`.otf` and the app loads it as a selectable family. The font list draws **each
+entry in its own typeface** (with a Latin + 白い熊 kanji + diacritics sample), alongside the app
+default, the system font, and monospace. Pick, apply, delete — all persisted.
 
-- Package ID: `dev.imranr.obtainium`
-- SHA-256 hash of signing certificate: `B3:53:60:1F:6A:1D:5F:D6:60:3A:E2:F5:0B:E8:0C:F3:01:36:7B:86:B6:AB:8B:1F:66:24:3D:A9:6C:D5:73:62`
-  - Note: The above signature is also valid for the F-Droid flavour of Obtainium, thanks to [reproducible builds](https://f-droid.org/docs/Reproducible_Builds/).
-- [PGP Public Key](https://keyserver.ubuntu.com/pks/lookup?search=contact%40imranr.dev&fingerprint=on&op=index) (to verify APK hashes)
+## 📏 Size & shape sliders — everything to zero
+Font size, font weight, **corner roundness (0–32 dp)**, **border thickness (0–6 dp, 0 = none)**, icon
+size, and row density are all sliders with an inline live preview. Borders and roundness go all the
+way to flat.
 
-## Limitations
-- For some sources, data is gathered using Web scraping and can easily break due to changes in website design. In such cases, more reliable methods may be unavailable.
+## ⬛🟨 Black-yellow by default
+Pure yellow `#FFFF00` on black `#000000` (never the muddy material yellow) out of the box — text,
+borders, and icons in yellow, and **action buttons (Add, Update, per-app download) as black fill with
+yellow text and a yellow border**. The knob-driven theme covers the whole app: app bars, cards,
+dialogs, inputs, switches, sliders, the FAB, search bar, and menus.
 
-## Screenshots
+## 📱 Tightened main screen
+A compact app bar (no tall expanding header), full-width content with no dead side margins, and app
+cards that run nearly edge-to-edge.
 
-| <img src="./assets/screenshots/1.apps.png" alt="Apps Page" /> | <img src="./assets/screenshots/2.dark_theme.png" alt="Dark Theme" />           | <img src="./assets/screenshots/3.material_you.png" alt="Material You" />    |
-| ------------------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| <img src="./assets/screenshots/4.app.png" alt="App Page" />   | <img src="./assets/screenshots/5.app_opts.png" alt="App Options" /> | <img src="./assets/screenshots/6.app_webview.png" alt="App Web View" /> |
+---
+
+## Built on Obtainium
+A fork of [Obtainium](https://github.com/ImranR98/Obtainium) (app id `shiroikuma.kakutoku`, so it
+coexists with the official build). Obtainium lets you install and update Android apps directly from
+their releases — GitHub, GitLab, F-Droid, and many more sources — with no central store in between.
+All upstream functionality is intact; this fork only layers the 白い熊 identity and theming on top.
+The code remains under **GPL-3.0**.
+
+## Building
+```bash
+git clone git@github.com:ShiroiKuma0/shiroikuma-kakutoku.git
+cd shiroikuma-kakutoku
+./build-fork.sh    # signed release APK -> ~/tmp/shiroikuma-kakutoku_<version>_arm64-v8a.apk
+```
+Versioning: `VERSION_NAME`/`VERSION_CODE` in `fork.properties` track upstream Obtainium;
+`BUILD_NUMBER` is the fork increment. Fork `versionName = "<VERSION_NAME>+<BUILD_NUMBER>"`,
+`versionCode = VERSION_CODE * 10000 + BUILD_NUMBER`.
