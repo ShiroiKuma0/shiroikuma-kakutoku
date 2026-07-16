@@ -1,0 +1,6 @@
+# Copy to android/key.properties (gitignored) and fill in the real password —
+# it is recorded in 白い熊's android-keystores.org (alias kakutoku).
+storeFile=/home/shiroikuma/.android-keystores/shiroikuma-kakutoku.jks
+storePassword=<store password>
+keyAlias=kakutoku
+keyPassword=<key password>
