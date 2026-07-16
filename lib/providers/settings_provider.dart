@@ -19,8 +19,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_storage/shared_storage.dart' as saf;
 
 const String obtainiumTempId = 'imranr98_obtainium_github.com';
-const String obtainiumId = 'dev.imranr.obtainium';
-const String obtainiumUrl = 'https://github.com/ImranR98/Obtainium';
+// shiroikuma-kakutoku fork: the app's own installed id + repo (self-detection
+// in the installers and the self-tracking entry added on first run).
+const String obtainiumId = 'shiroikuma.kakutoku';
+const String obtainiumUrl = 'https://github.com/ShiroiKuma0/shiroikuma-kakutoku';
 const Color obtainiumThemeColor = Color(0xFF6438B5);
 
 
