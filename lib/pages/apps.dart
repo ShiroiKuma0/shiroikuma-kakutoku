@@ -656,7 +656,7 @@ class AppsPageState extends State<AppsPage> {
     final urls = buf.toString().trimRight();
     unawaited(
       SharePlus.instance.share(
-        ShareParams(text: urls, subject: 'Obtainium - ${tr('appsString')}'),
+        ShareParams(text: urls, subject: '白い熊 獲得 - ${tr('appsString')}'),
       ),
     );
   }
@@ -672,7 +672,7 @@ class AppsPageState extends State<AppsPage> {
       SharePlus.instance.share(
         ShareParams(
           text: buf.toString(),
-          subject: 'Obtainium - ${tr('appsString')}',
+          subject: '白い熊 獲得 - ${tr('appsString')}',
         ),
       ),
     );

@@ -94,7 +94,7 @@ class _SettingsPageState extends State<SettingsPage> {
     ColorSwatch<Object> obtainiumSwatch,
   ) async {
     final Map<ColorSwatch<Object>, String> colorsNameMap =
-        <ColorSwatch<Object>, String>{obtainiumSwatch: 'Obtainium'};
+        <ColorSwatch<Object>, String>{obtainiumSwatch: '白い熊 獲得'};
     return ColorPicker(
       color: settingsProvider.themeColor,
       onColorChanged: (Color color) {
@@ -257,7 +257,7 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: () {
                 unawaited(
                   launchUrlString(
-                    'https://wiki.obtainium.imranr.dev/',
+                    'https://github.com/ShiroiKuma0/shiroikuma-kakutoku',
                     mode: LaunchMode.externalApplication,
                   ),
                 );
