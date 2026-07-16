@@ -34,6 +34,21 @@ kotlin {
     }
 }
 
+// shiroikuma-kakutoku fork: identity + versioning from ../fork.properties (repo root).
+// VERSION_NAME / VERSION_CODE track upstream Obtainium; BUILD_NUMBER is our +N increment.
+// forkVersionName = "<VERSION_NAME>+<BUILD_NUMBER>"; forkVersionCode = VERSION_CODE * 10000 + BUILD_NUMBER.
+val forkProperties = Properties()
+val forkPropertiesFile = rootProject.file("../fork.properties")
+if (forkPropertiesFile.exists()) {
+    forkPropertiesFile.reader(Charsets.UTF_8).use { forkProperties.load(it) }
+}
+val forkAppId = forkProperties.getProperty("APP_ID") ?: "shiroikuma.kakutoku"
+val forkVersionName =
+    "${forkProperties.getProperty("VERSION_NAME") ?: flutterVersionName}+${forkProperties.getProperty("BUILD_NUMBER") ?: "1"}"
+val forkVersionCode =
+    (forkProperties.getProperty("VERSION_CODE") ?: flutterVersionCode).toInt() * 10000 +
+        (forkProperties.getProperty("BUILD_NUMBER") ?: "1").toInt()
+
 android {
     namespace = "dev.imranr.obtainium"
     compileSdk = 37
@@ -46,13 +61,13 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.imranr.obtainium"
+        applicationId = forkAppId
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutterVersionCode.toInt()
-        versionName = flutterVersionName
+        versionCode = forkVersionCode
+        versionName = forkVersionName
     }
 
     flavorDimensions += "default"
