@@ -209,9 +209,9 @@ class ExportSchema {
     final schemaVersion = json['schemaVersion'] as int? ?? 1;
     if (schemaVersion > currentExportSchemaVersion) {
       throw FormatException(
-        'Export was created by a newer version of Obtainium '
+        'Export was created by a newer version of 白い熊 獲得 '
         '(schema v$schemaVersion, current is v$currentExportSchemaVersion). '
-        'Please update Obtainium to import this file.',
+        'Please update 白い熊 獲得 to import this file.',
       );
     }
     return ExportSchema(
