@@ -11,6 +11,8 @@ import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/pages/home.dart';
+import 'package:obtainium/providers/sk_ui_provider.dart';
+import 'package:obtainium/sk_theme.dart';
 import 'package:obtainium/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_system_colors/dynamic_system_colors.dart';
@@ -131,6 +133,8 @@ void main() async {
   final logs = LogsProvider();
   final logger = AppLogger(logs: logs);
   final settingsProvider = SettingsProvider();
+  final skUiProvider = SkUiProvider();
+  await skUiProvider.initialize();
   final sourceProvider = SourceProvider();
   final appsProvider = AppsProvider(
     settingsProvider: settingsProvider,
@@ -160,6 +164,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider.value(value: appsProvider),
         ChangeNotifierProvider.value(value: settingsProvider),
+        ChangeNotifierProvider.value(value: skUiProvider),
         Provider.value(value: np),
         Provider.value(value: logs),
         Provider<Logger>.value(value: logger),
@@ -292,6 +297,7 @@ class _ObtainiumState extends State<Obtainium> {
   @override
   Widget build(BuildContext context) {
     final SettingsProvider settingsProvider = context.watch<SettingsProvider>();
+    final SkUiProvider skUiProvider = context.watch<SkUiProvider>();
 
     return DynamicColorBuilder(
       builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
@@ -338,18 +344,28 @@ class _ObtainiumState extends State<Obtainium> {
           supportedLocales: context.supportedLocales,
           locale: context.locale,
           debugShowCheckedModeBanner: false,
-          theme: buildObtainiumTheme(
-            settingsProvider.theme == ThemeSettings.dark
-                ? darkColorScheme
-                : lightColorScheme,
-            settingsProvider.useSystemFont ? 'SystemFont' : 'Montserrat',
-          ),
-          darkTheme: buildObtainiumTheme(
-            settingsProvider.theme == ThemeSettings.light
-                ? lightColorScheme
-                : darkColorScheme,
-            settingsProvider.useSystemFont ? 'SystemFont' : 'Montserrat',
-          ),
+          theme: skUiProvider.knobs.enabled
+              ? buildSkTheme(
+                  skUiProvider.knobs,
+                  settingsProvider.useSystemFont ? 'SystemFont' : 'Montserrat',
+                )
+              : buildObtainiumTheme(
+                  settingsProvider.theme == ThemeSettings.dark
+                      ? darkColorScheme
+                      : lightColorScheme,
+                  settingsProvider.useSystemFont ? 'SystemFont' : 'Montserrat',
+                ),
+          darkTheme: skUiProvider.knobs.enabled
+              ? buildSkTheme(
+                  skUiProvider.knobs,
+                  settingsProvider.useSystemFont ? 'SystemFont' : 'Montserrat',
+                )
+              : buildObtainiumTheme(
+                  settingsProvider.theme == ThemeSettings.light
+                      ? lightColorScheme
+                      : darkColorScheme,
+                  settingsProvider.useSystemFont ? 'SystemFont' : 'Montserrat',
+                ),
           home: const HomePage(),
           builder: (context, child) {
             setAppLocale(context.locale);

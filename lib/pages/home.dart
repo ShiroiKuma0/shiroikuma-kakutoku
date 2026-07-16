@@ -399,15 +399,9 @@ class _HomePageState extends State<HomePage> {
       },
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        body: useTwoPane
-            ? content
-            : Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
-                  child: content,
-                ),
-              ),
+        // Full width — no max-width centering (it left dead margins left and
+        // right on wide/unfolded screens).
+        body: content,
         floatingActionButton: useTwoPane ? null : fab,
       ),
     );

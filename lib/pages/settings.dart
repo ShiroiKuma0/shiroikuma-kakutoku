@@ -12,6 +12,7 @@ import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/main.dart';
 import 'package:obtainium/pages/import_export.dart';
+import 'package:obtainium/pages/sk_ui_page.dart';
 import 'package:obtainium/providers/logs_provider.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/external_install_bridge.dart';
@@ -506,6 +507,30 @@ class _SettingsPageState extends State<SettingsPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       spacing: 20,
                       children: [
+                        Section(
+                          title: '白い熊 獲得 UI',
+                          children: [
+                            CardTile(
+                              padding: EdgeInsets.zero,
+                              child: ListTile(
+                                title: const Text('白い熊 獲得 UI'),
+                                subtitle: const Text(
+                                  'Colors, fonts, borders, sizes — the '
+                                  'black-yellow theming',
+                                ),
+                                leading: const Icon(Icons.palette_outlined),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const SkUiPage(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
                         Section(
                           title: tr('obtainiumExport'),
                           children: const [ExportSection()],
