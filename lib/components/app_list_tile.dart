@@ -249,13 +249,15 @@ class AppListTile extends StatelessWidget {
                   if (context.mounted) showError(e, context);
                 });
           };
+    // Per-app download/update button: black fill, accent (yellow) icon +
+    // border — the house action-button look.
     return IconButton.filled(
       onPressed: onPressed,
       tooltip: trackOnly ? tr('markUpdated') : tr('update'),
       style: IconButton.styleFrom(
-        backgroundColor: cs.primary,
-        foregroundColor: cs.onPrimary,
-        disabledBackgroundColor: cs.onSurface.withValues(alpha: 0.12),
+        backgroundColor: cs.surface,
+        foregroundColor: cs.primary,
+        side: BorderSide(color: cs.primary, width: 1.5),
         disabledForegroundColor: cs.onSurface.withValues(alpha: 0.38),
         visualDensity: VisualDensity.compact,
         shape: RoundedSuperellipseBorder(
@@ -631,7 +633,8 @@ class AppListGroupSection extends StatelessWidget {
     );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      // Minimal horizontal whitespace around the grouped app cards.
+      padding: const EdgeInsets.fromLTRB(2, 4, 2, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         // Small gaps so entries read as distinct positional tiles, matching the
