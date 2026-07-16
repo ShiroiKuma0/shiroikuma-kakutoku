@@ -14,6 +14,7 @@ import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/utils/locale_utils.dart';
 import 'package:obtainium/main.dart';
 import 'package:obtainium/pages/app.dart';
+import 'package:obtainium/pages/sk_ui_page.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
@@ -826,7 +827,8 @@ class AppsPageState extends State<AppsPage> {
     AppsProvider appsProvider,
   ) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      // Minimal horizontal whitespace around the app cards.
+      padding: const EdgeInsets.fromLTRB(2, 4, 2, 4),
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: _buildTile(
@@ -979,7 +981,7 @@ class AppsPageState extends State<AppsPage> {
     ];
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
         child: settingsProvider.isTV
             ? _TVSearchBar(
                 controller: searchController,
@@ -1040,7 +1042,7 @@ class AppsPageState extends State<AppsPage> {
         child: onObtain == null
             ? const SizedBox(width: double.infinity)
             : Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
                 child: ConnectedCard(
                   color: cs.primaryContainer,
                   child: Padding(
@@ -1198,12 +1200,32 @@ class AppsPageState extends State<AppsPage> {
                   CustomAppBar(
                     title: tr('appsString'),
                     actions: [
-                      IconButton(
-                        onPressed: () {
-                          NavHelper.pushSettingsPage(context);
-                        },
-                        icon: const Icon(Icons.settings_outlined),
-                        tooltip: tr('settings'),
+                      // Tap = Settings; long-press = the 白い熊 獲得 UI
+                      // theming page. (No Tooltip here — a tooltip's own
+                      // long-press recognizer would swallow the long-press.)
+                      Semantics(
+                        label: tr('settings'),
+                        button: true,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () {
+                              NavHelper.pushSettingsPage(context);
+                            },
+                            onLongPress: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SkUiPage(),
+                                ),
+                              );
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.all(10),
+                              child: Icon(Icons.settings_outlined),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),

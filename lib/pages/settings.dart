@@ -13,6 +13,7 @@ import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/main.dart';
 import 'package:obtainium/pages/import_export.dart';
 import 'package:obtainium/pages/logs.dart';
+import 'package:obtainium/pages/sk_ui_page.dart';
 import 'package:obtainium/providers/logs_provider.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/external_install_bridge.dart';
@@ -392,6 +393,17 @@ class _SettingsPageState extends State<SettingsPage> {
                   ctx, colorPicker, sortDropdown, orderControl,
                 ),
               ),
+            ),
+            // Fork: the 白い熊 獲得 theming knobs — colours, fonts, borders,
+            // sizes. Its own full page rather than a sub-page body, since it
+            // carries its own scaffold and live preview.
+            _settingsRow(
+              context,
+              icon: Icons.brush_outlined,
+              title: '白い熊 獲得 UI',
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SkUiPage())),
             ),
                           CardTile(
                             child: ListTile(

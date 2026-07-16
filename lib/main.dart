@@ -12,6 +12,8 @@ import 'package:obtainium/providers/settings_provider.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/utils/native_features.dart';
 import 'package:obtainium/pages/home.dart';
+import 'package:obtainium/providers/sk_ui_provider.dart';
+import 'package:obtainium/sk_theme.dart';
 import 'package:obtainium/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_system_colors/dynamic_system_colors.dart';
@@ -111,6 +113,8 @@ void main() async {
   final logs = LogsProvider();
   final logger = AppLogger(logs: logs);
   final settingsProvider = SettingsProvider();
+  final skUiProvider = SkUiProvider();
+  await skUiProvider.initialize();
   final sourceProvider = SourceProvider();
   final appsProvider = AppsProvider(
     settingsProvider: settingsProvider,
@@ -167,6 +171,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider.value(value: appsProvider),
         ChangeNotifierProvider.value(value: settingsProvider),
+        ChangeNotifierProvider.value(value: skUiProvider),
         Provider.value(value: np),
         Provider.value(value: logs),
         Provider<Logger>.value(value: logger),
@@ -308,6 +313,10 @@ class _ObtainiumState extends State<Obtainium> {
         context.select<SettingsProvider, ThemeSettings>((p) => p.theme);
     final useSystemFont =
         context.select<SettingsProvider, bool>((p) => p.useSystemFont);
+    // Fork: when the 白い熊 獲得 knobs are enabled they replace the whole
+    // theme, so this watches the knob set as a unit rather than selecting
+    // individual fields out of it.
+    final SkUiProvider skUiProvider = context.watch<SkUiProvider>();
 
     return DynamicColorBuilder(
       builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
@@ -353,18 +362,28 @@ class _ObtainiumState extends State<Obtainium> {
           supportedLocales: context.supportedLocales,
           locale: context.locale,
           debugShowCheckedModeBanner: false,
-          theme: buildObtainiumTheme(
-            themeSetting == ThemeSettings.dark
-                ? darkColorScheme
-                : lightColorScheme,
-            useSystemFont ? 'SystemFont' : 'Montserrat',
-          ),
-          darkTheme: buildObtainiumTheme(
-            themeSetting == ThemeSettings.light
-                ? lightColorScheme
-                : darkColorScheme,
-            useSystemFont ? 'SystemFont' : 'Montserrat',
-          ),
+          theme: skUiProvider.knobs.enabled
+              ? buildSkTheme(
+                  skUiProvider.knobs,
+                  useSystemFont ? 'SystemFont' : 'Montserrat',
+                )
+              : buildObtainiumTheme(
+                  themeSetting == ThemeSettings.dark
+                      ? darkColorScheme
+                      : lightColorScheme,
+                  useSystemFont ? 'SystemFont' : 'Montserrat',
+                ),
+          darkTheme: skUiProvider.knobs.enabled
+              ? buildSkTheme(
+                  skUiProvider.knobs,
+                  useSystemFont ? 'SystemFont' : 'Montserrat',
+                )
+              : buildObtainiumTheme(
+                  themeSetting == ThemeSettings.light
+                      ? lightColorScheme
+                      : darkColorScheme,
+                  useSystemFont ? 'SystemFont' : 'Montserrat',
+                ),
           home: const HomePage(),
           builder: (context, child) {
             if (context.locale != _lastLocale) {
