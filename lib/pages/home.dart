@@ -110,9 +110,9 @@ class _HomePageState extends State<HomePage> {
                 Text(tr('documentationLinksNote')),
                 const LinkText(
                   text:
-                      'https://github.com/ImranR98/Obtainium/blob/main/README.md',
+                      'https://github.com/ShiroiKuma0/shiroikuma-kakutoku/blob/custom/README.md',
                   url:
-                      'https://github.com/ImranR98/Obtainium/blob/main/README.md',
+                      'https://github.com/ShiroiKuma0/shiroikuma-kakutoku/blob/custom/README.md',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
