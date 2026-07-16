@@ -78,6 +78,12 @@ installable side-by-side with upstream Obtainium.
 
 ## Current status
 
-**Phase 0 in progress** (fork identity + tooling): repackaged `shiroikuma.kakutoku` / `白い熊 獲得`,
-fork versioning + signing + `build-fork.sh`, skills, keystore created 2026-07-16. Icon +
-de-branding + first build pending.
+**Phase 0 complete** (fork identity + icon + rebranding, 2026-07-16): repackaged
+`shiroikuma.kakutoku` / `白い熊 獲得`, fork versioning + signing + `build-fork.sh`, skills,
+keystore. Black-yellow traced launcher icon (adaptive vector + legacy mipmaps + TV banner +
+in-app `icon_small.png` + bundled masters). Full de-branding: self-tracking constants point at
+this fork (first run adds the app itself as 白い熊 獲得, updating from our GitHub releases),
+welcome/Help links → our repo, app title/share subjects/swatch label/export messages renamed,
+all 29 translation locales rebranded (values only — keys + formatting untouched). Kept as
+functional: internal class names, the `obtainium://` scheme, `apps.obtainium.imranr.dev`
+services, the APKMirror user-agent. First build `1.6.9+1` (versionCode `23480001`) delivered.
