@@ -8,12 +8,12 @@
 
 A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with **major additions**: a granular
 black-yellow 白い熊 獲得 UI theming page (colours, fonts, borders, sizes — all live-previewed),
-**category Export/Import** of the whole setup, a tightened edge-to-edge main screen, and
-house-styled action buttons.
+**category Export/Import** of the whole setup, **headless backup on demand** over a token-gated
+intent, a tightened edge-to-edge main screen, and house-styled action buttons.
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+7`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+8`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -30,10 +30,21 @@ One-tap reset to the black-yellow defaults.
 The first section of the UI page backs up **everything** by category — **Sources (tracked apps)
 first**, then app settings, source credentials, categories, and the 白い熊 獲得 UI itself (knobs,
 recent colours, and your imported font files ride along inside the export). A settable export
-folder is checked on opening for the latest export (loud red warning until one is set); one JSON
-file per export; import **merges, never wipes**, and offers an in-place app restart. Round pill
-buttons — Cancel left, Import/Export right — and black-yellow result dialogs that close the whole
-chain on success.
+folder is checked on opening for the latest export (loud red warning until one is set); **exactly
+one ZIP per backup** (`shiroikuma-kakutoku_<yyyy-MM-dd_HH-mm-ss>.zip`, a `manifest.json` plus one
+`<category>.json` inside); import **merges, never wipes**, and offers an in-place app restart.
+Round pill buttons — Cancel left, Import/Export right — and black-yellow result dialogs that close
+the whole chain on success.
+
+## 🤖 Headless backup on demand
+The app can back **itself** up with no Activity and no tapping: a companion automation app fires a
+token-gated broadcast, and 白い熊 獲得 writes the very same ZIP and answers with its absolute path,
+byte count, and human size. A master switch (**off** until you turn it on) and a copy-on-tap token
+sit right under the export rows; the token is generated on first sight, compared in constant time,
+and deliberately kept **out of the backup**. While it works the app reports **real counts, never a
+percentage** — `区分 3/5 — Sources`, `アプリ 128/240` — so a long export is legible from the
+outside. The requester may name the target directory, and the file it gets back is a perfectly
+ordinary backup you can restore from the Import button.
 
 ## 🌈 RGBA colour pickers with preset boxes
 Twelve colour slots (background, surface, text, secondary text, accent, borders, icons, top bar,
