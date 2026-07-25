@@ -10,6 +10,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,8 +24,24 @@ import 'package:shared_storage/shared_storage.dart' as saf;
 const Color skWarnRed = Color(0xFFFF5252);
 
 const String skExportFormat = 'kakutoku-export';
-const int skExportVersion = 1;
-const String skExportPrefix = 'shiroikuma-kakutoku-';
+
+/// v1 = single JSON file (pre-2026-07-25). v2 = the family ZIP: `manifest.json`
+/// plus one `<category id>.json` per exported category.
+const int skExportVersion = 2;
+
+/// The mandatory family file-name stem (白い熊, 2026-07-25): every backup this
+/// app writes — from the Export/Import panel and from the 保存復元 automation
+/// path alike — is `shiroikuma-kakutoku_<yyyy-MM-dd_HH-mm-ss>.zip`. No version,
+/// no infix, no suffix: all sister apps' backups share one directory and must
+/// sort and read uniformly.
+const String skExportPrefix = 'shiroikuma-kakutoku_';
+
+/// The v1 file-name stem, still recognised when looking for the latest export
+/// so backups written before the rename stay visible.
+const String skLegacyExportPrefix = 'shiroikuma-kakutoku-';
+
+/// The archive entry carrying the export's metadata.
+const String skManifestEntry = 'manifest.json';
 
 /// A selectable export/import category. `id` is the key inside the export
 /// JSON's `data` map. Order = display order (sources first).
@@ -47,15 +64,36 @@ const Set<String> _appSettingsExclude = {'exportDir', 'categories'};
 bool _isCredKey(String k) => k.endsWith('-creds');
 bool _isSkUiKey(String k) => k == 'skUiKnobs' || k == 'skUiRecentColors';
 
+/// The 保存復元 automation switch and token (`skAutomationEnabled`,
+/// `skAutomationToken`) are device-local secrets: the token must never travel
+/// in a backup ZIP, so the whole `skAutomation*` namespace stays out of the
+/// "App settings" prefs dump.
+bool _isAutomationKey(String k) => k.startsWith('skAutomation');
+
 String _pad2(int n) => n.toString().padLeft(2, '0');
 
-String skExportFileName() {
-  final now = DateTime.now();
-  final ts =
-      '${now.year}-${_pad2(now.month)}-${_pad2(now.day)}'
+String skTimestamp([DateTime? at]) {
+  final now = at ?? DateTime.now();
+  return '${now.year}-${_pad2(now.month)}-${_pad2(now.day)}'
       '_${_pad2(now.hour)}-${_pad2(now.minute)}-${_pad2(now.second)}';
-  return '$skExportPrefix$kPackageVersion-export_$ts.json';
 }
+
+String skExportFileName([DateTime? at]) => '$skExportPrefix${skTimestamp(at)}.zip';
+
+/// Byte count for display (`4.6 MB`, `1.20 GB`) — the automation caller cannot
+/// stat the file, so this app computes it.
+String skHumanSize(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  final kb = bytes / 1024;
+  if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
+  final mb = kb / 1024;
+  if (mb < 1024) return '${mb.toStringAsFixed(1)} MB';
+  return '${(mb / 1024).toStringAsFixed(2)} GB';
+}
+
+/// Progress while exporting: real counts, never a percentage.
+typedef SkExportProgress =
+    void Function(int current, int total, String unit, String text);
 
 /// The UI-page / panel status of the export folder + latest export in it.
 class SkExportStatus {
@@ -74,10 +112,24 @@ class SkExportStatus {
 /// (its stream never closes), so queries must never overlap.
 Future<void> _statusChain = Future.value();
 
-/// The timestamp our export filenames embed ("…export_2026-07-25_11-17-35.json").
+/// The timestamp our export filenames embed — both the current family name
+/// ("shiroikuma-kakutoku_2026-07-25_18-58-23.zip") and the v1 one it replaced
+/// ("shiroikuma-kakutoku-1.6.10+7-export_2026-07-25_11-17-35.json").
 final RegExp _exportTsRe = RegExp(
-  r'export_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})\.json$',
+  r'_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})\.(?:zip|json)$',
 );
+
+/// The `yyyy-MM-dd HH:mm:ss` stamp of one of our exports, or null if [name] is
+/// not one of them.
+String? skExportStamp(String name) {
+  if (!name.startsWith(skExportPrefix) &&
+      !name.startsWith(skLegacyExportPrefix)) {
+    return null;
+  }
+  final m = _exportTsRe.firstMatch(name);
+  if (m == null) return null;
+  return '${m.group(1)} ${m.group(2)}:${m.group(3)}:${m.group(4)}';
+}
 
 /// Queries the export folder (if set) for the newest 白い熊 獲得 export.
 /// Never throws and never hangs: every stage has its own timeout, every
@@ -167,10 +219,8 @@ Future<SkExportStatus> _lastExportStatusInner(
         .timeout(const Duration(seconds: 12));
     for (final f in files) {
       final name = (f.name ?? f.uri.pathSegments.last).split('/').last;
-      if (!name.startsWith(skExportPrefix)) continue;
-      final m = _exportTsRe.firstMatch(name);
-      if (m == null) continue;
-      final ts = '${m.group(1)} ${m.group(2)}:${m.group(3)}:${m.group(4)}';
+      final ts = skExportStamp(name);
+      if (ts == null) continue;
       if (newestTs == null || ts.compareTo(newestTs) > 0) newestTs = ts;
     }
   } on TimeoutException {
@@ -195,63 +245,154 @@ Future<SkExportStatus> _lastExportStatusInner(
   );
 }
 
-/// Builds the export JSON for the selected categories.
-Future<Map<String, dynamic>> skBuildExport({
+/// Builds one category's payload — the object stored as `<id>.json` inside the
+/// export ZIP (and as `data[<id>]` in a v1 export). [onProgress] reports the
+/// countable work inside the category (apps, fonts).
+Future<Object?> skBuildCategory(
+  SkExportCat cat, {
+  required AppsProvider appsProvider,
+  required SettingsProvider settingsProvider,
+  required SkUiProvider skUiProvider,
+  SkExportProgress? onProgress,
+}) async {
+  switch (cat) {
+    case SkExportCat.sources:
+      await appsProvider.waitForAppsToLoad();
+      final tracked = appsProvider.apps.values.toList();
+      final apps = <Map<String, dynamic>>[];
+      for (var i = 0; i < tracked.length; i++) {
+        apps.add(tracked[i].app.toJson());
+        onProgress?.call(
+          i + 1,
+          tracked.length,
+          'アプリ',
+          'アプリ ${i + 1}/${tracked.length}',
+        );
+      }
+      return {'apps': apps};
+    case SkExportCat.appSettings:
+      final m = <String, Object?>{};
+      for (final k in settingsProvider.prefs?.getKeys() ?? <String>{}) {
+        if (_appSettingsExclude.contains(k) ||
+            _isCredKey(k) ||
+            _isSkUiKey(k) ||
+            _isAutomationKey(k)) {
+          continue;
+        }
+        m[k] = settingsProvider.prefs?.get(k);
+      }
+      return m;
+    case SkExportCat.creds:
+      final m = <String, Object?>{};
+      for (final k in settingsProvider.prefs?.getKeys() ?? <String>{}) {
+        if (_isCredKey(k)) m[k] = settingsProvider.prefs?.get(k);
+      }
+      return m;
+    case SkExportCat.categories:
+      return settingsProvider.categories;
+    case SkExportCat.skUi:
+      final files = await skUiProvider.fontFiles();
+      final fonts = <String, String>{};
+      for (var i = 0; i < files.length; i++) {
+        fonts[files[i].path.split('/').last] = base64Encode(
+          await files[i].readAsBytes(),
+        );
+        onProgress?.call(
+          i + 1,
+          files.length,
+          'フォント',
+          'フォント ${i + 1}/${files.length}',
+        );
+      }
+      return {
+        'knobs': skUiProvider.knobs.toJson(),
+        'recentColors': skUiProvider.recentColors
+            .map((c) => c.toARGB32())
+            .toList(),
+        'fonts': fonts,
+      };
+  }
+}
+
+/// Builds the whole backup for [cats] as ONE ZIP — `manifest.json` plus one
+/// `<category id>.json` per category. This is the single export core: the
+/// Export/Import panel and the 保存復元 automation receiver are both thin
+/// callers, so a headless export is a normal, restorable backup.
+Future<Uint8List> skBuildExportZip({
   required AppsProvider appsProvider,
   required SettingsProvider settingsProvider,
   required SkUiProvider skUiProvider,
   required Set<SkExportCat> cats,
+  SkExportProgress? onProgress,
 }) async {
-  final data = <String, dynamic>{};
-  for (final cat in cats) {
-    switch (cat) {
-      case SkExportCat.sources:
-        await appsProvider.waitForAppsToLoad();
-        data[cat.id] = {
-          'apps': appsProvider.apps.values.map((e) => e.app.toJson()).toList(),
-        };
-      case SkExportCat.appSettings:
-        final m = <String, Object?>{};
-        for (final k in settingsProvider.prefs?.getKeys() ?? <String>{}) {
-          if (_appSettingsExclude.contains(k) ||
-              _isCredKey(k) ||
-              _isSkUiKey(k)) {
-            continue;
-          }
-          m[k] = settingsProvider.prefs?.get(k);
-        }
-        data[cat.id] = m;
-      case SkExportCat.creds:
-        final m = <String, Object?>{};
-        for (final k in settingsProvider.prefs?.getKeys() ?? <String>{}) {
-          if (_isCredKey(k)) m[k] = settingsProvider.prefs?.get(k);
-        }
-        data[cat.id] = m;
-      case SkExportCat.categories:
-        data[cat.id] = settingsProvider.categories;
-      case SkExportCat.skUi:
-        final fonts = <String, String>{};
-        for (final f in await skUiProvider.fontFiles()) {
-          fonts[f.path.split('/').last] = base64Encode(await f.readAsBytes());
-        }
-        data[cat.id] = {
-          'knobs': skUiProvider.knobs.toJson(),
-          'recentColors': skUiProvider.recentColors
-              .map((c) => c.toARGB32())
-              .toList(),
-          'fonts': fonts,
-        };
-    }
+  // Declaration order, so the ZIP's entries and the manifest always agree
+  // regardless of how the caller built the set.
+  final ordered = SkExportCat.values.where(cats.contains).toList();
+  final entries = <ArchiveFile>[];
+  for (var i = 0; i < ordered.length; i++) {
+    final cat = ordered[i];
+    onProgress?.call(
+      i + 1,
+      ordered.length,
+      '区分',
+      '区分 ${i + 1}/${ordered.length} — ${cat.label}',
+    );
+    final payload = await skBuildCategory(
+      cat,
+      appsProvider: appsProvider,
+      settingsProvider: settingsProvider,
+      skUiProvider: skUiProvider,
+      onProgress: onProgress,
+    );
+    entries.add(ArchiveFile.string('${cat.id}.json', jsonEncode(payload)));
   }
-  return {
+  final manifest = {
     'format': skExportFormat,
     'version': skExportVersion,
     'app': obtainiumId,
     'appVersion': kPackageVersion,
-    'exportedAt': DateTime.now().toIso8601String(),
-    'categories': cats.map((c) => c.id).toList(),
-    'data': data,
+    'createdTs': DateTime.now().toIso8601String(),
+    'categories': ordered.map((c) => c.id).toList(),
   };
+  final archive = Archive()
+    ..add(
+      ArchiveFile.string(
+        skManifestEntry,
+        const JsonEncoder.withIndent('  ').convert(manifest),
+      ),
+    );
+  for (final e in entries) {
+    archive.add(e);
+  }
+  return ZipEncoder().encodeBytes(archive);
+}
+
+/// Reads one of our export files — the family ZIP, or a v1 single JSON — into
+/// the `{format, version, data}` shape [skApplyImport] consumes.
+Future<Map<String, dynamic>> skReadExportFile(String path) async {
+  final bytes = await File(path).readAsBytes();
+  final isZip = bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B;
+  if (!isZip) {
+    final decoded = jsonDecode(utf8.decode(bytes));
+    if (decoded is! Map<String, dynamic>) throw 'not a JSON object';
+    return decoded;
+  }
+  final archive = ZipDecoder().decodeBytes(bytes);
+  final manifestEntry = archive.findFile(skManifestEntry);
+  if (manifestEntry == null) {
+    throw 'not a 白い熊 獲得 export (no $skManifestEntry in the ZIP)';
+  }
+  final manifest = jsonDecode(
+    utf8.decode(manifestEntry.readBytes() ?? const []),
+  );
+  if (manifest is! Map<String, dynamic>) throw 'corrupt $skManifestEntry';
+  final data = <String, dynamic>{};
+  for (final cat in SkExportCat.values) {
+    final entry = archive.findFile('${cat.id}.json');
+    if (entry == null) continue;
+    data[cat.id] = jsonDecode(utf8.decode(entry.readBytes() ?? const []));
+  }
+  return {...manifest, 'data': data};
 }
 
 void _applyPref(SettingsProvider sp, String k, dynamic v) {
@@ -499,7 +640,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
       _error = null;
     });
     try {
-      final export = await skBuildExport(
+      final bytes = await skBuildExportZip(
         appsProvider: appsProvider,
         settingsProvider: settingsProvider,
         skUiProvider: skUiProvider,
@@ -509,15 +650,17 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
       final result = await saf.createFile(
         dir,
         displayName: name,
-        mimeType: 'application/json',
-        bytes: utf8.encode(const JsonEncoder.withIndent('  ').convert(export)),
+        mimeType: 'application/zip',
+        bytes: bytes,
       );
       if (result == null) throw 'could not create the file in the folder';
       if (!mounted) return;
       setState(() => _busy = false);
       await _showResultDialog(
         title: '✓ Export finished',
-        body: 'Exported:\n$name',
+        body:
+            'Exported:\n$name\n'
+            '${cats.length} categories · ${skHumanSize(bytes.length)}',
         buttons: const [('OK', 'ok')],
       );
       // Acknowledged → close the chain (panel now, UI page by the caller).
@@ -558,8 +701,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
       _error = null;
     });
     try {
-      final decoded = jsonDecode(await File(path).readAsString());
-      if (decoded is! Map<String, dynamic>) throw 'not a JSON object';
+      final decoded = await skReadExportFile(path);
       final summary = await skApplyImport(
         decoded: decoded,
         cats: cats,
