@@ -8,11 +8,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:obtainium/components/sk_eximport.dart';
 import 'package:obtainium/components/sk_ui_widgets.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_automation.dart';
 import 'package:obtainium/providers/sk_ui_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 class SkUiPage extends StatefulWidget {
@@ -27,10 +30,91 @@ class _SkUiPageState extends State<SkUiPage> {
   // queried when the page opens (and re-queried after folder changes).
   SkExportStatus? _exStatus;
 
+  // 保存復元 automation: the gate 白い熊 opens by hand, and the token sister-app
+  // tasks must present. Nothing is reachable until the switch is on.
+  bool _automationOn = false;
+  String _automationToken = '';
+  bool _allFilesAccess = false;
+
   @override
   void initState() {
     super.initState();
     _refreshExportStatus();
+    final prefs = context.read<SettingsProvider>().prefs;
+    if (prefs != null) {
+      _automationOn = SkAutomation.isEnabled(prefs);
+      _automationToken = SkAutomation.token(prefs);
+    }
+    _refreshAllFilesAccess();
+  }
+
+  Future<void> _refreshAllFilesAccess() async {
+    var granted = false;
+    try {
+      granted = await Permission.manageExternalStorage.isGranted;
+    } catch (_) {
+      // Platform without the permission concept — the SAF folder still works.
+    }
+    if (mounted) setState(() => _allFilesAccess = granted);
+  }
+
+  Future<void> _setAutomation(bool value) async {
+    final prefs = context.read<SettingsProvider>().prefs;
+    if (prefs == null) return;
+    await SkAutomation.setEnabled(prefs, value);
+    if (!mounted) return;
+    setState(() => _automationOn = value);
+    if (!value || _allFilesAccess) return;
+    // A sister-app task may hand us an absolute directory to write into, which
+    // needs All-files access; without it the export falls back to the folder
+    // configured above.
+    try {
+      await Permission.manageExternalStorage.request();
+    } catch (_) {
+      // Denied or unavailable — the fallback still produces a backup.
+    }
+    await _refreshAllFilesAccess();
+  }
+
+  Future<void> _copyToken() async {
+    await Clipboard.setData(ClipboardData(text: _automationToken));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Automation token copied to the clipboard')),
+    );
+  }
+
+  Future<void> _regenerateToken() async {
+    final prefs = context.read<SettingsProvider>().prefs;
+    if (prefs == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Regenerate the automation token?'),
+        content: const Text(
+          'The current token stops working immediately. Every copy already '
+          'pasted elsewhere — 自由作業盤’s 「保存復元の設定 -- [979][01]」 above '
+          'all — must be updated with the new one.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Regenerate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final token = SkAutomation.regenerate(prefs);
+    if (!mounted) return;
+    setState(() => _automationToken = token);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('New automation token generated')),
+    );
   }
 
   Future<void> _refreshExportStatus() async {
@@ -203,6 +287,53 @@ class _SkUiPageState extends State<SkUiPage> {
             level: 1,
             trailing: const Icon(Icons.chevron_right),
             onTap: _openEximportPanel,
+          ),
+          SkSwitchRow(
+            label: 'Automation export',
+            level: 1,
+            value: _automationOn,
+            onChanged: _setAutomation,
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(skIndent(1), 0, 14, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sister-app tasks may trigger this app’s export with the '
+                  'token-gated intent.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                if (_automationOn && !_allFilesAccess)
+                  Text(
+                    '⚠ No All-files access — backups land in the folder above, '
+                    'ignoring the directory a task asks for.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: skWarnRed,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          SkRow(
+            label: 'Automation token',
+            level: 1,
+            below: Text(
+              _automationToken.isEmpty
+                  ? '…'
+                  : '${SkAutomation.abbreviate(_automationToken)} — tap to copy',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            trailing: TextButton(
+              onPressed: _regenerateToken,
+              child: const Text('Regenerate'),
+            ),
+            onTap: _copyToken,
           ),
 
           // ---- General ----
