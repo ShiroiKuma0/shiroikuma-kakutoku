@@ -75,6 +75,17 @@
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
             android:exported="false" />
+        <!-- shiroikuma-kakutoku fork: the 保存復元 state-export contract.
+             No android:permission — the caller (白い熊's 自由作業盤) cannot hold
+             one, so the automation token is the gate. -->
+        <receiver
+            android:name=".StateExportReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="${applicationId}.action.EXPORT_STATE" />
+                <action android:name="${applicationId}.action.LIST_CATEGORIES" />
+            </intent-filter>
+        </receiver>
         <meta-data
             android:name="dev.imranr.obtainium.service.NOTIFICATION_ICON"
             android:resource="@drawable/ic_notification" />
@@ -92,6 +103,11 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
+    <!-- shiroikuma-kakutoku fork: the 保存復元 automation may be told to write
+         its backup ZIP to an arbitrary absolute directory (the `path` extra),
+         which needs All-files access. Without the grant the export falls back
+         to the SAF folder configured on the 白い熊 獲得 UI page. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
