@@ -8,13 +8,73 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:obtainium/components/sk_eximport.dart';
 import 'package:obtainium/components/sk_ui_widgets.dart';
 import 'package:obtainium/providers/apps_provider.dart';
+import 'package:obtainium/providers/settings_provider.dart';
 import 'package:obtainium/providers/sk_ui_provider.dart';
 import 'package:provider/provider.dart';
 
-class SkUiPage extends StatelessWidget {
+class SkUiPage extends StatefulWidget {
   const SkUiPage({super.key});
+
+  @override
+  State<SkUiPage> createState() => _SkUiPageState();
+}
+
+class _SkUiPageState extends State<SkUiPage> {
+  // Export/Import status: the export folder + latest export in it,
+  // queried when the page opens (and re-queried after folder changes).
+  SkExportStatus? _exStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshExportStatus();
+  }
+
+  Future<void> _refreshExportStatus() async {
+    final sp = context.read<SettingsProvider>();
+    SkExportStatus st;
+    try {
+      st = await skLastExportStatus(
+        sp,
+        progress: (stage) {
+          if (mounted) {
+            setState(
+              () => _exStatus = SkExportStatus(
+                dirSet: true,
+                dirName: '⋯',
+                message: stage,
+              ),
+            );
+          }
+        },
+      );
+    } catch (e) {
+      st = SkExportStatus(dirSet: false, message: '⚠ Status check failed: $e');
+    }
+    if (mounted) setState(() => _exStatus = st);
+  }
+
+  Future<void> _pickExportDir() async {
+    try {
+      await context.read<SettingsProvider>().pickExportDir();
+    } catch (_) {
+      // Picker unavailable — the status line keeps showing the warning.
+    }
+    await _refreshExportStatus();
+  }
+
+  Future<void> _openEximportPanel() async {
+    final closePage = await showSkEximportPanel(context);
+    if (!mounted) return;
+    if (closePage) {
+      Navigator.of(context).pop();
+      return;
+    }
+    await _refreshExportStatus();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +168,43 @@ class SkUiPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
+          // ---- Export / Import ----
+          const SkSectionHeading('Export / Import', first: true),
+          SkRow(
+            label: 'Export folder',
+            level: 1,
+            below: Text(
+              _exStatus == null
+                  ? '…'
+                  : (_exStatus!.dirName ?? '(not set — tap to choose)'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: (_exStatus?.dirSet ?? true)
+                    ? theme.colorScheme.primary
+                    : skWarnRed,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onTap: _pickExportDir,
+          ),
+          if (_exStatus != null)
+            Padding(
+              padding: EdgeInsets.fromLTRB(skIndent(1), 0, 14, 4),
+              child: Text(
+                _exStatus!.message,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: _exStatus!.dirSet
+                      ? theme.colorScheme.primary
+                      : skWarnRed,
+                ),
+              ),
+            ),
+          SkRow(
+            label: 'Export / Import…',
+            level: 1,
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _openEximportPanel,
+          ),
+
           // ---- General ----
           const SkSectionHeading('General'),
           SkSwitchRow(
