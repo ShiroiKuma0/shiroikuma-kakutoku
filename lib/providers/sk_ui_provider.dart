@@ -305,6 +305,60 @@ class SkUiProvider extends ChangeNotifier {
     return family;
   }
 
+  /// Font files currently in the fonts dir (for the category export).
+  Future<List<File>> fontFiles() async {
+    final dir = await _fontsDir();
+    final out = <File>[];
+    await for (final f in dir.list()) {
+      if (f is! File) continue;
+      final lower = f.path.toLowerCase();
+      if (lower.endsWith('.ttf') || lower.endsWith('.otf')) out.add(f);
+    }
+    return out;
+  }
+
+  /// Writes a font from an import (bytes + basename) and loads it. Returns
+  /// false (and removes the file) if it is not a loadable font.
+  Future<bool> importFontBytes(String name, List<int> bytes) async {
+    final safe = name.split('/').last; // basename only — no path traversal
+    final dir = await _fontsDir();
+    final dest = File('${dir.path}/$safe');
+    await dest.writeAsBytes(bytes);
+    final family = familyNameForFile(dest.path);
+    try {
+      final loader = FontLoader(family)
+        ..addFont(
+          dest
+              .readAsBytes()
+              .then((b) => ByteData.sublistView(Uint8List.fromList(b))),
+        );
+      await loader.load();
+    } catch (_) {
+      await dest.delete();
+      return false;
+    }
+    if (!externalFonts.contains(family)) {
+      externalFonts.add(family);
+      externalFonts.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// Replaces knobs and/or recent colors from a category import and
+  /// persists the result.
+  void applyImported({SkUiKnobs? newKnobs, List<Color>? colors}) {
+    if (newKnobs != null) knobs = newKnobs;
+    if (colors != null && colors.isNotEmpty) {
+      recentColors = colors.take(maxRecentColors).toList();
+      _prefs?.setStringList(
+        _recentColorsKey,
+        recentColors.map((e) => e.toARGB32().toString()).toList(),
+      );
+    }
+    save();
+  }
+
   Future<void> deleteFont(String family) async {
     final dir = await _fontsDir();
     await for (final f in dir.list()) {
