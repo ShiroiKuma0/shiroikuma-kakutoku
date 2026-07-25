@@ -6,13 +6,14 @@
 
 **Get app updates straight from the source — in black and yellow.**
 
-A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with a **fully configurable
-black-yellow UI**: a granular 白い熊 獲得 UI theming page (colours, fonts, borders, sizes — all
-live-previewed), a tightened edge-to-edge main screen, and house-styled action buttons.
+A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with **major additions**: a granular
+black-yellow 白い熊 獲得 UI theming page (colours, fonts, borders, sizes — all live-previewed),
+**category Export/Import** of the whole setup, a tightened edge-to-edge main screen, and
+house-styled action buttons.
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.9+6`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+7`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -20,9 +21,19 @@ Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
 ## 🎨 白い熊 獲得 UI — granular theming page
 A dedicated theming screen in the sister-repo house style, reached from the top of Settings **or by
-long-pressing the Settings cog** on the main screen. Big bold underlined section headings, deeply
-indented rows, and tight spacing so the hierarchy reads instantly. **Everything previews live** — the
-whole app (and the page itself) restyles as you drag. One-tap reset to the black-yellow defaults.
+long-pressing the Settings cog** on the main screen. Bold headings underlined exactly as wide as
+their text, hairline section spacers, deeply indented rows, and tight spacing so the hierarchy reads
+instantly. **Everything previews live** — the whole app (and the page itself) restyles as you drag.
+One-tap reset to the black-yellow defaults.
+
+## 📦 Category Export / Import
+The first section of the UI page backs up **everything** by category — **Sources (tracked apps)
+first**, then app settings, source credentials, categories, and the 白い熊 獲得 UI itself (knobs,
+recent colours, and your imported font files ride along inside the export). A settable export
+folder is checked on opening for the latest export (loud red warning until one is set); one JSON
+file per export; import **merges, never wipes**, and offers an in-place app restart. Round pill
+buttons — Cancel left, Import/Export right — and black-yellow result dialogs that close the whole
+chain on success.
 
 ## 🌈 RGBA colour pickers with preset boxes
 Twelve colour slots (background, surface, text, secondary text, accent, borders, icons, top bar,
