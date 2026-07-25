@@ -25,6 +25,8 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private companion object {
         const val EXTERNAL_INSTALL_CHANNEL = "dev.imranr.obtainium/external_install"
+        // shiroikuma-kakutoku fork channel (app restart for the import flow).
+        const val SK_CHANNEL = "dev.imranr.obtainium/sk"
         const val APK_MIME = "application/vnd.android.package-archive"
 
         /** Request code for tracked external-installer launches. */
@@ -187,6 +189,23 @@ class MainActivity : FlutterActivity() {
                             result,
                         )
                     }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // shiroikuma-kakutoku fork: app restart for the 白い熊 獲得 UI
+        // import flow ("Restart now" after a category import).
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            SK_CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "restartApp" -> {
+                    packageManager.getLaunchIntentForPackage(packageName)?.let {
+                        startActivity(Intent.makeRestartActivityTask(it.component))
+                    }
+                    result.success(true)
+                    Runtime.getRuntime().exit(0)
                 }
                 else -> result.notImplemented()
             }
