@@ -166,6 +166,17 @@ class SkUiProvider extends ChangeNotifier {
   List<String> externalFonts = []; // loaded family names (file basenames)
 
   Future<void> initialize() async {
+    await _loadPersistedState();
+    await loadExternalFonts();
+    notifyListeners();
+  }
+
+  /// Loads the persisted state without registering any font with the engine.
+  /// The headless 保存復元 export needs the knobs, the recent colors and the
+  /// font *files* — never the rendered glyphs — so it skips [loadExternalFonts].
+  Future<void> initializeWithoutFonts() => _loadPersistedState();
+
+  Future<void> _loadPersistedState() async {
     _prefs = await SharedPreferences.getInstance();
     final raw = _prefs!.getString(_prefsKey);
     if (raw != null) {
@@ -204,8 +215,6 @@ class SkUiProvider extends ChangeNotifier {
         Color(0xFF4080FF),
       ];
     }
-    await loadExternalFonts();
-    notifyListeners();
   }
 
   void save() {
