@@ -19,36 +19,59 @@ const String skFontSample = 'AaIiMmOoQqWw 012 白い熊相撲道 áčďéěíň�
 
 double skIndent(int level) => 16.0 + skIndentStep * level;
 
-/// Big bold section heading with a full-width 2dp accent rule below.
+/// kxkb-style section heading: a full-width 1px hairline spacer above
+/// (between sections — omitted via [first]), then a 20sp bold accent title
+/// underlined only as wide as the text (2.5dp rule, 2dp gap).
 class SkSectionHeading extends StatelessWidget {
-  const SkSectionHeading(this.title, {super.key});
+  const SkSectionHeading(this.title, {super.key, this.first = false});
   final String title;
+  final bool first;
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final sk = context.watch<SkUiProvider>();
+    final scale = sk.knobs.enabled ? sk.knobs.fontSizeScale : 1.0;
+    final hairline = 1 / MediaQuery.devicePixelRatioOf(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
+      padding: EdgeInsets.only(top: first ? 12 : 10),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: accent,
+          if (!first) ...[
+            Container(height: hairline, color: accent),
+            const SizedBox(height: 8),
+          ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
+            child: IntrinsicWidth(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontSize: 20 * scale,
+                      fontWeight: FontWeight.bold,
+                      color: accent,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(height: 2.5, color: accent),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 5),
-          Container(height: 2, color: accent),
         ],
       ),
     );
   }
 }
 
-/// Smaller bold subgroup heading with a 2dp underline exactly as wide as the
-/// text, indented one level.
+/// Smaller (17sp) bold subgroup heading with a 1.5dp underline exactly as
+/// wide as the text, indented one level.
 class SkSubgroupHeading extends StatelessWidget {
   const SkSubgroupHeading(this.title, {super.key, this.level = 1});
   final String title;
@@ -56,9 +79,12 @@ class SkSubgroupHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final sk = context.watch<SkUiProvider>();
+    final scale = sk.knobs.enabled ? sk.knobs.fontSizeScale : 1.0;
     return Padding(
-      padding: EdgeInsets.fromLTRB(skIndent(level), 8, 16, 2),
+      padding: EdgeInsets.fromLTRB(skIndent(level), 10, 16, 2),
       child: Row(
         children: [
           IntrinsicWidth(
@@ -67,13 +93,15 @@ class SkSubgroupHeading extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  maxLines: 1,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontSize: 17 * scale,
                     fontWeight: FontWeight.bold,
                     color: accent,
                   ),
                 ),
                 const SizedBox(height: 2),
-                Container(height: 2, color: accent),
+                Container(height: 1.5, color: accent),
               ],
             ),
           ),
