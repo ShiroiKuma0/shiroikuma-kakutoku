@@ -19,10 +19,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * every sister app to back them all up in one run.
  *
  * `<pkg>.action.EXPORT_STATE` runs this app's own export headlessly (no
- * Activity, no user interaction) and `<pkg>.action.LIST_CATEGORIES` answers
- * with the exportable categories. Neither reimplements anything: both boot the
- * app's Dart code in a plain FlutterEngine and call into
- * `lib/providers/sk_automation.dart`, which drives the one export core.
+ * Activity, no user interaction), `<pkg>.action.LIST_CATEGORIES` answers with
+ * the exportable categories, and `<pkg>.action.CANCEL_EXPORT` stops a running
+ * export. None of them reimplements anything: all boot the app's Dart code in
+ * a plain FlutterEngine and call into `lib/providers/sk_automation.dart`,
+ * which drives the one export core.
  *
  * Hard-won constraints, verified on 白い熊's Mate XT (EMUI), 2026-07-23 — do
  * not "improve" these:
@@ -63,6 +64,15 @@ class StateExportReceiver : BroadcastReceiver() {
         /** The caller must get an answer even if Dart never produces one. */
         const val WATCHDOG_MS = 4L * 60L * 1000L
 
+        /**
+         * How long a cancel may hold its broadcast open waiting for Dart to
+         * acknowledge. The flag is set the moment Dart's event loop turns, but
+         * the export it stops may be inside a long synchronous stretch, and a
+         * fire-and-forget action must never sit on a receiver until Android
+         * complains.
+         */
+        const val CANCEL_ACK_MS = 5L * 1000L
+
         val lock = Any()
         val mainHandler = Handler(Looper.getMainLooper())
         val queued = ArrayDeque<Request>()
@@ -81,6 +91,10 @@ class StateExportReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
+        if (action == "${context.packageName}.action.CANCEL_EXPORT") {
+            cancelExport(intent)
+            return
+        }
         val kind = when (action) {
             "${context.packageName}.action.EXPORT_STATE" -> "export"
             "${context.packageName}.action.LIST_CATEGORIES" -> "categories"
@@ -117,6 +131,71 @@ class StateExportReceiver : BroadcastReceiver() {
         mainHandler.postDelayed({ reply(appContext, request, "ERROR:timed out") }, WATCHDOG_MS)
 
         if (engine == null) startEngine(appContext) else drain(appContext)
+    }
+
+    /**
+     * `<pkg>.action.CANCEL_EXPORT` — stop the export that is running.
+     *
+     * Fire-and-forget: this action sends NO reply of its own. The terminal
+     * `ERROR:cancelled` belongs to the original `EXPORT_STATE` request and
+     * goes out through [reply], under the same one-reply-per-request guard, so
+     * a cancel and a success can never both fire.
+     *
+     * Safe to send at any time. Nothing running, an already-finished export,
+     * a token that does not match, an id for some other run — every one of
+     * them is a silent no-op: no error, no reply, no crash.
+     *
+     * Two deliberate bypasses. It comes in through this EXPORTED receiver
+     * because the stop path lives in Dart and no third-party caller can reach
+     * a non-exported component of this app; and it skips the one-at-a-time
+     * request queue on both sides, because a cancel that waited its turn
+     * behind the export it is meant to stop would never arrive.
+     */
+    private fun cancelExport(intent: Intent) {
+        val activeChannel = channel
+        if (activeChannel == null || !dartReady) {
+            // No engine, no export — there is nothing this could stop.
+            Log.i(TAG, "CANCEL_EXPORT with nothing running — ignored")
+            return
+        }
+        val pending = goAsync()
+        val finished = AtomicBoolean(false)
+        val release = {
+            if (finished.compareAndSet(false, true)) {
+                try {
+                    pending.finish()
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Could not finish the cancel broadcast", t)
+                }
+            }
+        }
+        mainHandler.postDelayed({ release() }, CANCEL_ACK_MS)
+        try {
+            // The token is verified in Dart, next to the prefs that hold it.
+            activeChannel.invokeMethod(
+                "cancel",
+                mapOf(
+                    "token" to intent.getStringExtra("token"),
+                    "reply_id" to intent.getStringExtra("reply_id"),
+                ),
+                object : MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        Log.i(TAG, "CANCEL_EXPORT accepted=${result == true}")
+                        release()
+                    }
+
+                    override fun error(code: String, message: String?, details: Any?) {
+                        Log.w(TAG, "CANCEL_EXPORT rejected: $code ${message ?: ""}")
+                        release()
+                    }
+
+                    override fun notImplemented() = release()
+                },
+            )
+        } catch (t: Throwable) {
+            Log.w(TAG, "CANCEL_EXPORT could not be delivered", t)
+            release()
+        }
     }
 
     /** Boots the app's Dart code without an Activity. */
