@@ -45,6 +45,14 @@ const String skManifestEntry = 'manifest.json';
 
 /// A selectable export/import category. `id` is the key inside the export
 /// JSON's `data` map. Order = display order (sources first).
+///
+/// [defaultSelected] is this app STATING whether an item starts ticked rather
+/// than letting a picker guess: it seeds the Export/Import panel's checkboxes
+/// and rides out as the fourth `on|off` field of the `LIST_CATEGORIES` reply,
+/// so 保存復元's item editor opens on the same answer. Everything this app
+/// exports is small and not re-creatable, so every category is `on`; the flag
+/// exists so a future large-derived-regenerable category can say otherwise
+/// without the contract having to change again.
 enum SkExportCat {
   sources('sources', 'Sources (tracked apps)'),
   appSettings('appSettings', 'App settings'),
@@ -52,10 +60,21 @@ enum SkExportCat {
   categories('categories', 'Categories'),
   skUi('skUi', '白い熊 獲得 UI (colors · fonts · sizes)');
 
-  const SkExportCat(this.id, this.label);
+  // No category passes `off` today — that is the point of the audit above,
+  // not an oversight — so the analyzer sees an optional parameter nobody
+  // supplies. It stays because the alternative is changing this contract
+  // again the first time a category should start unticked.
+  // ignore: unused_element_parameter
+  const SkExportCat(this.id, this.label, {this.defaultSelected = true});
   final String id;
   final String label;
+  final bool defaultSelected;
 }
+
+/// The categories that start ticked — what an automation request with no
+/// `items` extra means, and what the Export/Import panel opens on.
+Set<SkExportCat> skDefaultCats() =>
+    SkExportCat.values.where((c) => c.defaultSelected).toSet();
 
 /// Settings keys that live in the shared prefs file but belong to another
 /// category (or are device-local) and must not ride along in "App settings".
@@ -94,6 +113,18 @@ String skHumanSize(int bytes) {
 /// Progress while exporting: real counts, never a percentage.
 typedef SkExportProgress =
     void Function(int current, int total, String unit, String text);
+
+/// Asked between entries: true = unwind at this boundary.
+typedef SkCancelProbe = bool Function();
+
+/// Thrown out of [skBuildExportZip] when a [SkCancelProbe] goes true. The
+/// export unwinds at an entry boundary — never mid-`write()`, never by
+/// interrupting a thread or killing the process.
+class SkExportCancelled implements Exception {
+  const SkExportCancelled();
+  @override
+  String toString() => 'cancelled';
+}
 
 /// The UI-page / panel status of the export folder + latest export in it.
 class SkExportStatus {
@@ -324,12 +355,14 @@ Future<Uint8List> skBuildExportZip({
   required SkUiProvider skUiProvider,
   required Set<SkExportCat> cats,
   SkExportProgress? onProgress,
+  SkCancelProbe? isCancelled,
 }) async {
   // Declaration order, so the ZIP's entries and the manifest always agree
   // regardless of how the caller built the set.
   final ordered = SkExportCat.values.where(cats.contains).toList();
   final entries = <ArchiveFile>[];
   for (var i = 0; i < ordered.length; i++) {
+    if (isCancelled?.call() ?? false) throw const SkExportCancelled();
     final cat = ordered[i];
     onProgress?.call(
       i + 1,
@@ -346,6 +379,9 @@ Future<Uint8List> skBuildExportZip({
     );
     entries.add(ArchiveFile.string('${cat.id}.json', jsonEncode(payload)));
   }
+  // The last boundary before the one long synchronous stretch (encodeBytes)
+  // and the write that follows it.
+  if (isCancelled?.call() ?? false) throw const SkExportCancelled();
   final manifest = {
     'format': skExportFormat,
     'version': skExportVersion,
@@ -566,10 +602,13 @@ class _SkEximportPanel extends StatefulWidget {
 }
 
 class _SkEximportPanelState extends State<_SkEximportPanel> {
+  // Seeded from the categories' own default, so this sheet and the 保存復元
+  // item editor (which reads the same flag off `LIST_CATEGORIES`) open on the
+  // same answer.
   final Map<SkExportCat, bool> _checked = {
-    for (final c in SkExportCat.values) c: true,
+    for (final c in SkExportCat.values) c: c.defaultSelected,
   };
-  bool _selectAll = true;
+  bool _selectAll = SkExportCat.values.every((c) => c.defaultSelected);
   bool _busy = false;
   String? _error;
   SkExportStatus? _status;
