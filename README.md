@@ -13,7 +13,7 @@ intent, a tightened edge-to-edge main screen, and house-styled action buttons.
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+8`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+9`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -44,7 +44,18 @@ sit right under the export rows; the token is generated on first sight, compared
 and deliberately kept **out of the backup**. While it works the app reports **real counts, never a
 percentage** — `区分 3/5 — Sources`, `アプリ 128/240` — so a long export is legible from the
 outside. The requester may name the target directory, and the file it gets back is a perfectly
-ordinary backup you can restore from the Import button.
+ordinary backup you can restore from the Import button. A running export can also be **stopped from
+outside**, and a stopped one leaves the backup folder *exactly* as it found it — no short archive,
+no leftovers, and a terminal answer that proves the run ended rather than carrying on unseen.
+
+## 🔌 Silent installs through 白い熊 雫
+Obtainium's Shizuku installer, taught to work with **白い熊 雫** (`shiroikuma.shizuku`) directly.
+That manager defines its own permission name because stock Shizuku owns the classic one and two
+apps cannot define the same permission and still install side by side — so this fork declares
+`af.shizuku.plus.permission.API_V23` explicitly, and the authorization you grant in the manager
+actually lands instead of failing silently. The classic name is kept alongside it as the
+stock-Shizuku fallback, so one build works against either server with no compatibility stub in
+between.
 
 ## 🌈 RGBA colour pickers with preset boxes
 Twelve colour slots (background, surface, text, secondary text, accent, borders, icons, top bar,
