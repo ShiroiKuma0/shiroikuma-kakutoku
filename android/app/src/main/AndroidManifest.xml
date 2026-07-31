@@ -84,6 +84,10 @@
             <intent-filter>
                 <action android:name="${applicationId}.action.EXPORT_STATE" />
                 <action android:name="${applicationId}.action.LIST_CATEGORIES" />
+                <!-- Cancel must come in through the EXPORTED receiver: a
+                     third-party caller cannot reach a non-exported service,
+                     so the stop path is signalled internally from here. -->
+                <action android:name="${applicationId}.action.CANCEL_EXPORT" />
             </intent-filter>
         </receiver>
         <meta-data
@@ -109,6 +113,20 @@
          to the SAF folder configured on the 白い熊 獲得 UI page. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- shiroikuma-kakutoku fork: the Shizuku client permissions. A Shizuku
+         server decides which installed packages are its clients by scanning
+         requestedPermissions, and the two servers look for different names:
+         白い熊 雫 (shiroikuma.shizuku) accepts af.shizuku.plus.* and defines it
+         itself, while stock Shizuku accepts only moe.shizuku.manager.* (and
+         deliberately owns that name, so 白い熊 雫 cannot also define it —
+         INSTALL_FAILED_DUPLICATE_PERMISSION). The moe.* line already arrives
+         by manifest merge from the Shizuku provider AAR; ours is declared
+         explicitly so a permission that actually EXISTS on the device is
+         requested, which is what lets the server's grant land instead of
+         failing silently. A uses-permission naming a permission no installed
+         package defines is inert, so having both costs nothing. -->
+    <uses-permission android:name="af.shizuku.plus.permission.API_V23" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Required to query activities that can process text, see:

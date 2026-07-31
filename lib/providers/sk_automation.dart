@@ -98,12 +98,54 @@ class SkAutomation {
   }
 }
 
-/// The `LIST_CATEGORIES` reply: `OK:` followed by one `id<TAB>label` line per
-/// exportable category. The ids are exactly the ones accepted in `items`, and
-/// they are the ZIP's entry-name stems. The list is flat — no category of this
-/// app has separately selectable parts — so no line carries a third field.
-String skCategoriesReply() =>
-    'OK:${SkExportCat.values.map((c) => '${c.id}\t${c.label}').join('\n')}';
+/// The `LIST_CATEGORIES` reply: `OK:` followed by one
+/// `id<TAB>label<TAB>parent<TAB>on|off` line per exportable category. The ids
+/// are exactly the ones accepted in `items`, and they are the ZIP's entry-name
+/// stems.
+///
+/// The list is flat — no category of this app has separately selectable parts
+/// — so the third (parent) field is always EMPTY, which the positional format
+/// still requires so that the fourth field lands where it belongs. That fourth
+/// field is this app stating whether the item starts ticked in 保存復元's
+/// picker instead of the picker assuming it; see [SkExportCat.defaultSelected].
+String skCategoriesReply() => 'OK:${SkExportCat.values.map((c) {
+  final on = c.defaultSelected ? 'on' : 'off';
+  return '${c.id}\t${c.label}\t\t$on';
+}).join('\n')}';
+
+/// The `reply_id` of the export running right now, or null when none is. Two
+/// exports at once are forbidden by the contract, so one slot is enough — the
+/// id only narrows WHICH run a `CANCEL_EXPORT` may target.
+String? _runningExportReplyId;
+
+/// Set by [skHandleCancel]; the export reads it at every entry boundary and on
+/// both sides of the write. Reset when an export starts, so a stale cancel can
+/// never kill the next run.
+bool _exportCancelled = false;
+
+/// Handles a `CANCEL_EXPORT`. Token-gated exactly like every other request,
+/// and otherwise a **silent no-op**: nothing running, an id for a different
+/// run, or an export that already finished all return without a reply, without
+/// an error and without a crash. The cancel action answers nothing — the
+/// terminal `ERROR:cancelled` belongs to the ORIGINAL request and is sent by
+/// [_export] through the normal reply channel.
+Future<bool> skHandleCancel(Map<String, Object?> request) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    if (SkAutomation.verify(prefs, request['token'] as String?) != null) {
+      return false;
+    }
+    final running = _runningExportReplyId;
+    if (running == null) return false;
+    final target = (request['reply_id'] as String?)?.trim() ?? '';
+    if (target.isNotEmpty && target != running) return false;
+    _exportCancelled = true;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Throttles progress broadcasts to at most one every 500 ms, with a forced
 /// final one at completion.
@@ -141,6 +183,12 @@ void skAutomationMain() {
   WidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel(skAutomationChannel);
   channel.setMethodCallHandler((call) async {
+    // `cancel` deliberately BYPASSES the one-at-a-time `handle` queue: a
+    // cancel that waited its turn behind the export it is meant to stop would
+    // never arrive.
+    if (call.method == 'cancel') {
+      return skHandleCancel(Map<String, Object?>.from(call.arguments as Map));
+    }
     if (call.method != 'handle') return null;
     final request = Map<String, Object?>.from(call.arguments as Map);
     final replyId = request['reply_id'] as String? ?? '';
@@ -181,15 +229,37 @@ Future<String> skHandleAutomationRequest(
 }
 
 /// Runs the app's own export headlessly and writes exactly ONE ZIP.
+///
+/// Owns the cancel bookkeeping: the running `reply_id` is published for
+/// `CANCEL_EXPORT` for exactly as long as this run lasts, and a cancel landing
+/// anywhere inside it unwinds to the one terminal `ERROR:cancelled` — sent
+/// through the normal reply channel, under the receiver's existing
+/// one-reply-per-request guard, so it can never double-fire with a success.
 Future<String> _export(
   Map<String, Object?> request,
   void Function(Map<String, Object?>) sendProgress,
 ) async {
-  // ---- items: which categories (absent/empty = everything) ----
+  _runningExportReplyId = (request['reply_id'] as String?) ?? '';
+  _exportCancelled = false;
+  try {
+    return await _exportInner(request, sendProgress);
+  } on SkExportCancelled {
+    return 'ERROR:cancelled';
+  } finally {
+    _runningExportReplyId = null;
+    _exportCancelled = false;
+  }
+}
+
+Future<String> _exportInner(
+  Map<String, Object?> request,
+  void Function(Map<String, Object?>) sendProgress,
+) async {
+  // ---- items: which categories (absent/empty = this app's default set) ----
   final itemsRaw = (request['items'] as String?)?.trim() ?? '';
   final Set<SkExportCat> cats;
   if (itemsRaw.isEmpty) {
-    cats = SkExportCat.values.toSet();
+    cats = skDefaultCats();
   } else {
     final byId = {for (final c in SkExportCat.values) c.id: c};
     final picked = <SkExportCat>{};
@@ -231,6 +301,7 @@ Future<String> _export(
   }
 
   // ---- build the ZIP ----
+  if (_exportCancelled) throw const SkExportCancelled();
   final appsProvider = AppsProvider(
     isBg: true,
     settingsProvider: settingsProvider,
@@ -245,14 +316,30 @@ Future<String> _export(
     skUiProvider: skUiProvider,
     cats: cats,
     onProgress: progress.report,
+    isCancelled: () => _exportCancelled,
   );
 
   // ---- write it, once ----
+  //
+  // This app has no `.part` file to sweep up: the ZIP is built whole in memory
+  // and handed to the filesystem in a single call. The equivalent promise —
+  // that a cancelled export leaves the backup folder EXACTLY as it found it —
+  // is kept by not writing at all once cancelled, and by removing the file
+  // again if the cancel landed while those bytes were going out.
   final name = skExportFileName();
+  if (_exportCancelled) throw const SkExportCancelled();
   final String writtenPath;
   if (directDir != null) {
     final file = File('$directDir/$name');
     await file.writeAsBytes(bytes, flush: true);
+    if (_exportCancelled) {
+      try {
+        await file.delete();
+      } catch (_) {
+        // Nothing better to do — the cancel reply still stands.
+      }
+      throw const SkExportCancelled();
+    }
     writtenPath = file.path;
   } else {
     final created = await saf.createFile(
@@ -263,6 +350,14 @@ Future<String> _export(
     );
     if (created == null) {
       return 'ERROR:could not write to the configured export folder';
+    }
+    if (_exportCancelled) {
+      try {
+        await saf.delete(created.uri);
+      } catch (_) {
+        // Nothing better to do — the cancel reply still stands.
+      }
+      throw const SkExportCancelled();
     }
     final dirPath = _absolutePathForTreeUri(safDir);
     writtenPath = dirPath == null
