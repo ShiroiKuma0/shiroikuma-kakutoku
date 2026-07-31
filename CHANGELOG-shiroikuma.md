@@ -3,7 +3,61 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.10+8 — current
+## 1.6.10+9 — current
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490009`.
+
+### 保存復元 — the export can now be stopped (new)
+- **`shiroikuma.kakutoku.action.CANCEL_EXPORT`** — a third action on the same exported receiver, so
+  a running headless export can be stopped from outside. Extras: `token` (the same gate as every
+  other request) and an optional `reply_id` (absent = the export you are running, unambiguous
+  because two at once are forbidden).
+- **It comes in through the exported receiver on purpose.** The stop path lives in Dart, and a
+  third-party caller can reach no non-exported component of this app — a stop button the requester
+  cannot actually reach is the failure this action exists to avoid.
+- **It bypasses the one-at-a-time request queue** on both the native and the Dart side: a cancel
+  that waited its turn behind the very export it is meant to stop would never arrive.
+- **The cancel answers nothing** — fire-and-forget, never `OK:`. The terminal **`ERROR:cancelled`**
+  belongs to the *original* `EXPORT_STATE` request and goes out through the normal reply channel,
+  under the existing `AtomicBoolean` guard, so a cancel and a success can never both fire.
+- **Safe to send at any time.** Nothing running, an export that already finished, a token that does
+  not match, an id naming another run — every one of them is a **silent no-op**: no error, no reply,
+  no crash.
+- **The backup folder is left exactly as it was found.** The flag is read between ZIP entries, so
+  the export unwinds at an entry boundary — never mid-`write()`, never by interrupting a thread or
+  killing the process. This app writes no `.part` file (the ZIP is built whole in memory and handed
+  over in one call), so the same promise is kept by checking on **both** sides of the write and
+  deleting the file again if the cancel landed while those bytes were going out — on the
+  absolute-path and SAF paths alike. No short archive, no stray leftovers.
+- A 5 s acknowledgement watchdog keeps the fire-and-forget cancel from holding its broadcast open
+  while the export is inside a long synchronous stretch.
+
+### 保存復元 — `LIST_CATEGORIES` states its own defaults
+- Every reply line is now **`id⇥label⇥parent⇥on|off`**, with the empty parent field the positional
+  format requires. The fourth field is this app **stating** whether an item starts ticked in the
+  backup picker instead of the picker assuming it.
+- **Every category is `on`** — nothing this app exports is large, derived *and* re-creatable — but
+  the answer is stated rather than inferred, and a category added later inherits a field that is
+  already there.
+- The in-app Export/Import sheet seeds its checkboxes from **the same flag**, so it and the
+  automation picker open on the same answer; an absent `items` extra now resolves through that
+  default set rather than "everything".
+
+### Shizuku — works with 白い熊 雫 without a compatibility stub
+- **`af.shizuku.plus.permission.API_V23` is declared explicitly.** 白い熊 雫
+  (`shiroikuma.shizuku`) defines that name and deliberately does *not* define
+  `moe.shizuku.manager.permission.API_V23`, which stock Shizuku owns — declaring both would make the
+  two managers uninstallable side by side.
+- With stock Shizuku absent, the `moe.*` name is defined by **no package on the device**. An
+  undefined permission can never be granted, so the server's `grantRuntimePermission` failed
+  silently and `checkSelfPermission()` stayed denied however often the app was re-authorized in the
+  manager. Declaring a name that actually **exists** is what lets the grant land, and drops the
+  dependency on a compatibility stub being installed.
+- The `moe.*` line (which arrives by manifest merge from the Shizuku provider AAR) is kept as the
+  stock-Shizuku fallback: a `uses-permission` naming a permission no installed package defines is
+  inert, so one build works against either server and costs nothing when only one is present.
+
+## 1.6.10+8
 
 Base: upstream Obtainium **1.6.10** (`versionCode` 2349) — `custom` rebased onto the new upstream
 release tag, fork versioning moved to `1.6.10+…` (`versionCode` `23490008` here).
