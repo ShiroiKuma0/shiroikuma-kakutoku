@@ -72,9 +72,38 @@ class GitHub extends AppSource {
         'includePrereleases',
         label: tr('includePrereleases'),
         value: false,
+        excludes: const ['trackCommits'],
       ),
     ],
-    AppSource.fallbackToOlderReleasesFormItem,
+    // Fork: same switch as AppSource.fallbackToOlderReleasesFormItem, but
+    // mutually exclusive with commit following — there are no releases to fall
+    // back to. Either side releases the other; neither is ever locked.
+    [
+      GeneratedFormSwitch(
+        'fallbackToOlderReleases',
+        label: tr('fallbackToOlderReleases'),
+        value: true,
+        excludes: const ['trackCommits'],
+      ),
+    ],
+    // Fork: follow the repo's commits instead of its releases — for upstreams
+    // we rebase onto and build ourselves (see sk_linked_version.dart).
+    [
+      GeneratedFormSwitch(
+        'trackCommits',
+        label: tr('trackCommits'),
+        value: false,
+        excludes: const ['includePrereleases', 'fallbackToOlderReleases'],
+      ),
+    ],
+    [
+      GeneratedFormTextField(
+        'trackCommitsBranch',
+        label: tr('trackCommitsBranch'),
+        required: false,
+        hint: tr('defaultBranch'),
+      ),
+    ],
     [
       GeneratedFormTextField(
         'filterReleaseTitlesByRegEx',
@@ -306,6 +335,10 @@ class GitHub extends AppSource {
     return reqUrl;
   }
 
+  @override
+  bool enforceTrackOnlyFor(Map<String, dynamic> additionalSettings) =>
+      enforceTrackOnly || additionalSettings['trackCommits'] == true;
+
   Future<String> getAPIHost(Map<String, dynamic> additionalSettings) async =>
       'https://api.${hosts[0]}';
 
@@ -457,9 +490,15 @@ class GitHub extends AppSource {
       if (b == null) return 1;
 
       if (isDateOnly) {
-        final dateA = dates.putIfAbsent(a, () => _getReleaseDateFromRelease(a, useLatestAssetDateAsReleaseDate));
-        final dateB = dates.putIfAbsent(b, () => _getReleaseDateFromRelease(b, useLatestAssetDateAsReleaseDate));
-        return (dateA ?? DateTime(0)).compareTo(dateB ?? DateTime(0));
+        final dateA = dates.putIfAbsent(
+          a,
+          () => _getReleaseDateFromRelease(a, useLatestAssetDateAsReleaseDate),
+        );
+        final dateB = dates.putIfAbsent(
+          b,
+          () => _getReleaseDateFromRelease(b, useLatestAssetDateAsReleaseDate),
+        );
+        return (dateA ?? DateTime(1)).compareTo(dateB ?? DateTime(0));
       }
 
       final nameA = a['tag_name'] ?? a['name'];
@@ -467,9 +506,15 @@ class GitHub extends AppSource {
       final stdFormats = formats[a]!.intersection(formats[b]!);
 
       if (sortMethod == 'smartname-datefallback' && stdFormats.isEmpty) {
-        final dateA = _getReleaseDateFromRelease(a, useLatestAssetDateAsReleaseDate);
-        final dateB = _getReleaseDateFromRelease(b, useLatestAssetDateAsReleaseDate);
-        return (dateA ?? DateTime(0)).compareTo(dateB ?? DateTime(0));
+        final dateA = _getReleaseDateFromRelease(
+          a,
+          useLatestAssetDateAsReleaseDate,
+        );
+        final dateB = _getReleaseDateFromRelease(
+          b,
+          useLatestAssetDateAsReleaseDate,
+        );
+        return (dateA ?? DateTime(1)).compareTo(dateB ?? DateTime(0));
       }
 
       if (sortMethod != 'name' && stdFormats.isNotEmpty) {
@@ -783,11 +828,76 @@ class GitHub extends AppSource {
     }
   }
 
+  /// Fork: the newest commit on the tracked branch, as a pseudo-release whose
+  /// version mirrors the `<commit date>.g<8-char sha>` tail that our
+  /// git-versioned forks embed in their own version name — so "up to date"
+  /// means "rebased onto this commit".
+  ///
+  /// The date is the commit's own committer date, as the git-versioning skill
+  /// specifies, and is there to sort: a sha alone orders builds arbitrarily.
+  /// GitHub reports it in UTC while a fork's build script reads it in the
+  /// commit's own timezone, so the two can differ by a day near midnight —
+  /// harmless, since it is always the sha that decides whether a fork is
+  /// current.
+  Future<APKDetails> _fetchLatestCommitDetails(
+    String standardUrl,
+    Map<String, dynamic> additionalSettings,
+  ) async {
+    final branch = (additionalSettings['trackCommitsBranch'] as String?)
+        ?.trim();
+    final apiUrl = await convertStandardUrlToAPIUrl(
+      standardUrl,
+      additionalSettings,
+    );
+    final url =
+        '$apiUrl/commits?per_page=1'
+        '${branch != null && branch.isNotEmpty ? '&sha=${Uri.encodeQueryComponent(branch)}' : ''}';
+    final Response res = await sourceRequest(url, additionalSettings);
+    if (res.statusCode != 200) {
+      rateLimitErrorCheck(res);
+      throw getObtainiumHttpError(res);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List || decoded.isEmpty) {
+      throw NoReleasesError();
+    }
+    final commit = decoded.first;
+    final String? sha = commit['sha'] as String?;
+    if (sha == null || sha.length < 8) {
+      throw NoReleasesError();
+    }
+    final commitData = commit['commit'];
+    final String? dateString =
+        commitData?['committer']?['date'] ?? commitData?['author']?['date'];
+    final String? message = commitData?['message'] as String?;
+    final DateTime? commitDate = dateString != null
+        ? DateTime.tryParse(dateString)
+        : null;
+    final String datePrefix = commitDate != null
+        ? '${commitDate.toUtc().toIso8601String().substring(0, 10)}.'
+        : '';
+    return APKDetails(
+      '$datePrefix'
+      'g${sha.substring(0, 8)}',
+      [],
+      getAppNames(standardUrl),
+      releaseDate: commitDate,
+      changeLog: message,
+    );
+  }
+
   @override
   Future<APKDetails> getLatestAPKDetails(
     String standardUrl,
     Map<String, dynamic> additionalSettings,
   ) async {
+    if (additionalSettings['trackCommits'] == true) {
+      try {
+        return await _fetchLatestCommitDetails(standardUrl, additionalSettings);
+      } catch (e) {
+        rethrowOrWrapError(e);
+      }
+    }
     try {
       return await fetchReleaseDetailsWithTagFallback(
         standardUrl,

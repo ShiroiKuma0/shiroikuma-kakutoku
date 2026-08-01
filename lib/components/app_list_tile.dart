@@ -14,6 +14,7 @@ import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/utils/format_utils.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/utils/nav_helper.dart';
 // AppsFilter and AppListBuilder are defined below in this file.
@@ -37,7 +38,7 @@ void showChangeLogDialog(
       return GeneratedFormModal(
         title: tr('changes'),
         items: const [],
-        message: app.latestVersion,
+        message: skDisplayVersion(app.latestVersion),
         additionalWidgets: [
           changesUrl != null
               ? LinkText(
@@ -117,6 +118,11 @@ VoidCallback? getChangeLogFn(BuildContext context, App app) {
 class AppIconWidget extends StatefulWidget {
   final String appId;
   final bool installed;
+
+  /// Fork: the package a tap should launch — the app's own when installed,
+  /// or the local build a linked app is compared against. Null = not
+  /// launchable.
+  final String? openPackageId;
   final AppsProvider appsProvider;
 
   const AppIconWidget({
@@ -124,6 +130,7 @@ class AppIconWidget extends StatefulWidget {
     required this.appId,
     required this.installed,
     required this.appsProvider,
+    this.openPackageId,
   });
 
   @override
@@ -154,8 +161,8 @@ class _AppIconWidgetState extends State<AppIconWidget> {
     return Semantics(
       label: name,
       button: true,
-      onTap: widget.installed
-          ? () => packageManager.openApp(widget.appId)
+      onTap: widget.openPackageId != null
+          ? () => packageManager.openApp(widget.openPackageId!)
           : null,
       onLongPress: () {
         NavHelper.pushAppPage(context, widget.appId,
@@ -171,8 +178,9 @@ class _AppIconWidgetState extends State<AppIconWidget> {
           ),
         ),
         onDoubleTap: () {
-          if (widget.installed) {
-            packageManager.openApp(widget.appId);
+          final target = widget.openPackageId;
+          if (target != null) {
+            packageManager.openApp(target);
           }
         },
         onLongPress: () {
@@ -304,16 +312,22 @@ class AppListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final showChangesFn = getChangeLogFn(context, _app);
     final hasUpdate = isAppUpdateable(_app, settingsProvider);
+    // Fork: a linked app's installed version is owned by the linked package,
+    // so "mark updated" would be undone by the next save — hide the button.
+    final canMarkUpdated = skLinkedPackage(_app) == null;
     final Widget trailingRow = LayoutBuilder(
       builder: (context, constraints) => Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (hasUpdate) ...[_updateButton(context), const SizedBox(width: 8)],
+          if (hasUpdate && canMarkUpdated) ...[
+            _updateButton(context),
+            const SizedBox(width: 8),
+          ],
           _VersionLabel(
             appInMemory: appInMemory,
             settingsProvider: settingsProvider,
-            maxWidth: math.min(constraints.maxWidth / 3, 200),
+            maxWidth: math.min(constraints.maxWidth / 2, 260),
             showChangesFn: showChangesFn,
           ),
         ],
@@ -427,16 +441,15 @@ class AppListTile extends StatelessWidget {
                         .onSurface
                         .withValues(alpha: 0.10)
                     : Colors.transparent,
-                selectedTileColor: Theme.of(context)
-                    .colorScheme
-                    .primary
+                selectedTileColor: Theme.of(context).colorScheme.primary
                     .withValues(alpha: _app.pinned ? 0.2 : 0.1),
                 selected: multiSelected || detailSelected,
                 leading: settingsProvider.isTV
                     ? null
                     : AppIconWidget(
                         appId: _app.id,
-                        installed: appInMemory.installedInfo != null,
+                        installed: appInMemory.displayPackageId != null,
+                        openPackageId: appInMemory.displayPackageId,
                         appsProvider: appsProvider,
                       ),
                 onLongPress: () {
@@ -457,10 +470,7 @@ class AppListTile extends StatelessWidget {
                     ? Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _authorText(),
-                          _repoMovedRow(context),
-                        ],
+                        children: [_authorText(), _repoMovedRow(context)],
                       )
                     : _authorText(),
                 trailing: downloadProgress != null
@@ -501,8 +511,7 @@ class AppListTile extends StatelessWidget {
                   color: cs.errorContainer,
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 24),
-                  child: Icon(Icons.delete_outline,
-                      color: cs.onErrorContainer),
+                  child: Icon(Icons.delete_outline, color: cs.onErrorContainer),
                 ),
                 confirmDismiss: (direction) async {
                   if (direction == DismissDirection.startToEnd) {
@@ -750,8 +759,7 @@ class AppListBuilder {
         : const <String>[];
 
     return apps.where((app) {
-      if (app.app.installedVersion == app.app.latestVersion &&
-          !(filter.includeUptodate)) {
+      if (!skIsOutdated(app.app) && !(filter.includeUptodate)) {
         return false;
       }
       if (app.app.installedVersion != null &&
@@ -915,12 +923,14 @@ class _VersionLabel extends StatelessWidget {
             child: DefaultTextStyle.merge(
               style: const TextStyle(fontSize: 14),
               child: Text(
-                installedVersionText(app),
+                // Fork: shown in full — folded over up to three lines rather
+                // than cut off, which long git-versioned strings always were.
+                skWrappableVersion(installedVersionText(app)),
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,
                 style: TextStyle(
-                  fontStyle:
-                      isVersionPseudo(app) ? FontStyle.italic : null,
+                  fontStyle: isVersionPseudo(app) ? FontStyle.italic : null,
                   color: updateColor,
                 ),
               ),
@@ -964,9 +974,9 @@ class _VersionLabel extends StatelessWidget {
   }
 
   String installedVersionText(App app) {
-    final installed = app.installedVersion;
-    final latest = app.latestVersion;
-    if (installed != null && installed != latest) {
+    final installed = skDisplayVersionOrNull(app.installedVersion);
+    final latest = skDisplayVersion(app.latestVersion);
+    if (installed != null && skIsOutdated(app)) {
       return '$installed → $latest';
     }
     return installed ?? tr('notInstalled');

@@ -46,6 +46,7 @@ import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/app_sources/githubstars.dart';
 import 'package:obtainium/providers/logs_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 
 part 'app_json_migration.dart';
 
@@ -500,6 +501,11 @@ abstract class AppSource {
     return app;
   }
 
+  /// Whether apps from this source must be track-only. Sources that decide it
+  /// per app (GitHub's commit tracking, which yields no APKs) override this.
+  bool enforceTrackOnlyFor(Map<String, dynamic> additionalSettings) =>
+      enforceTrackOnly;
+
   Future<Map<String, dynamic>> buildMergedSettings(
     Map<String, dynamic> additionalSettings,
     SettingsProvider settingsProvider,
@@ -618,6 +624,33 @@ abstract class AppSource {
   /// Some additional data may be needed for Apps regardless of Source
   List<List<GeneratedFormItem>> get _commonAppSettingFormItems => [
     [GeneratedFormSwitch('trackOnly', label: tr('trackOnly'))],
+    // Fork: monitor an upstream source but compare against the local build of
+    // it (our fork APK) — see lib/providers/sk_linked_version.dart. The App
+    // page fills in the picker button and the autocomplete list.
+    [
+      GeneratedFormTextField(
+        'linkedInstalledPackage',
+        label: tr('linkedInstalledApp'),
+        required: false,
+        hint: tr('notLinked'),
+      ),
+    ],
+    [
+      GeneratedFormTextField(
+        'linkedVersionStripRegEx',
+        label: tr('linkedVersionStripRegEx'),
+        required: false,
+        hint: r'\+\d+$',
+        additionalValidators: [(value) => regExValidator(value)],
+      ),
+    ],
+    [
+      GeneratedFormSwitch(
+        'updateOnlyIfNewer',
+        label: tr('updateOnlyIfNewer'),
+        value: true,
+      ),
+    ],
     [
       GeneratedFormTextField(
         'versionExtractionRegEx',
@@ -1131,7 +1164,7 @@ class SourceProvider {
     bool inferAppIdIfOptional = false,
   }) async {
     additionalSettings = Map<String, dynamic>.from(additionalSettings);
-    if (trackOnlyOverride || source.enforceTrackOnly) {
+    if (trackOnlyOverride || source.enforceTrackOnlyFor(additionalSettings)) {
       additionalSettings['trackOnly'] = true;
     }
     final trackOnly = additionalSettings['trackOnly'] == true;
@@ -1638,10 +1671,18 @@ class VersionService {
 /// common non-strict standard format (see
 /// [VersionService.compareVersionsNumerically]) and the "hide downgrades"
 /// setting is enabled — otherwise a downgrade is still presented as an update.
+/// Fork: [skIsOutdated] owns the "is this actually a newer release?" question
+/// — bare build-variant suffixes, pushes waved through with "set as updated",
+/// commit identity for entries following an upstream head, and the
+/// linked-package "only if newer" rule all live there. It is consulted first
+/// so those rules govern every call site upstream routes through here.
 bool isAppUpdateable(App app, SettingsProvider settingsProvider) {
   final installed = app.installedVersion;
   final latest = app.latestVersion;
   if (installed == null || installed == latest) {
+    return false;
+  }
+  if (!skIsOutdated(app)) {
     return false;
   }
   if (!settingsProvider.hideDowngrades) {

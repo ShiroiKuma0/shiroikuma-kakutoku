@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/components/category_editor.dart';
+import 'package:obtainium/components/sk_installed_app_picker.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/pages/app.dart';
 import 'package:obtainium/pages/import_export.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -47,6 +49,10 @@ class AddAppPageState extends State<AddAppPage> {
   bool inferAppIdIfOptional = true;
   List<String> pickedCategories = [];
   int urlInputKey = 0;
+
+  /// Fork: bumped after picking a linked app, so the options form re-reads the
+  /// new value (GeneratedForm re-initialises when an item's trailingKey moves).
+  int linkedPickerRevision = 0;
   late final SourceProvider sourceProvider;
 
   Future<String?>? _sourceNoteFuture;
@@ -507,6 +513,51 @@ class AddAppPageState extends State<AddAppPage> {
     );
   }
 
+  /// Fork: gives the "compare against installed app" row the same affordances
+  /// as the edit-an-existing-app screen — a picker button and a typeahead over
+  /// installed packages, instead of a bare package-name field.
+  List<List<GeneratedFormItem>> _withLinkedAppPicker(
+    List<List<GeneratedFormItem>> rows,
+  ) {
+    final List<String> packageOptions =
+        skInstalledPackages
+            .where((p) => p.packageName != null && skIsUserApp(p))
+            .map((p) => p.packageName!)
+            .toList()
+          ..sort();
+    return rows.map((row) {
+      return row.map((e) {
+        if (e.key != skLinkedPackageKey || e is! GeneratedFormTextField) {
+          return e;
+        }
+        return GeneratedFormTextField(
+          e.key,
+          label: e.label,
+          value: (e.value ?? '') as String,
+          required: false,
+          hint: e.hint,
+          autoCompleteOptions: packageOptions,
+          trailingKey: 'linkedPicker$linkedPickerRevision',
+          trailing: IconButton(
+            icon: const Icon(Icons.apps),
+            tooltip: tr('pickInstalledApp'),
+            onPressed: () async {
+              final picked = await showSkInstalledAppPicker(
+                context,
+                selected: additionalSettings[skLinkedPackageKey] as String?,
+              );
+              if (picked == null) return;
+              setState(() {
+                additionalSettings[skLinkedPackageKey] = picked;
+                linkedPickerRevision++;
+              });
+            },
+          ),
+        );
+      }).toList();
+    }).toList();
+  }
+
   Widget _buildSourceSpecificForm(SettingsProvider settingsProvider) {
     final s = pickedSource!;
     final formItems = cloneFormItems(s.combinedAppSpecificSettingFormItems);
@@ -538,7 +589,7 @@ class AddAppPageState extends State<AddAppPage> {
         '${s.name}-${s.hostChanged.toString()}-${s.hostIdenticalDespiteAnyChange.toString()}',
       ),
       items: [
-        ...formItems,
+        ..._withLinkedAppPicker(formItems),
         ...(pickedSourceOverride != null
             ? s.sourceConfigSettingFormItems.map((e) => [e])
             : []),
@@ -716,8 +767,7 @@ class AddAppPageState extends State<AddAppPage> {
                                 required: false,
                                 additionalValidators: [
                                   (value) {
-                                    if (value == null ||
-                                        value.trim().isEmpty) {
+                                    if (value == null || value.trim().isEmpty) {
                                       return null;
                                     }
                                     try {
@@ -750,37 +800,71 @@ class AddAppPageState extends State<AddAppPage> {
                           },
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      gettingAppInfo
-                          ? const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2),
-                              ),
-                            )
-                          : IconButton(
-                              icon: const Icon(Icons.add_rounded),
-                              visualDensity: VisualDensity.compact,
-                              tooltip: tr('add'),
-                              onPressed:
-                                  doingSomething ||
-                                          pickedSource == null ||
-                                          !_urlValid ||
-                                          userInput.trim().isEmpty ||
-                                          (pickedSource!
-                                                      .combinedAppSpecificSettingFormItems
-                                                      .isNotEmpty &&
-                                                  !additionalSettingsValid)
-                                      ? null
-                                      : () {
-                                          settingsProvider.selectionClick();
-                                          addApp(context);
-                                        },
-                            ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      // Fork: the old bare "+" in the row above gave no hint of
+                      // what it would do; this states it, and sits below the
+                      // URL field where the flow actually ends.
+                      onPressed:
+                          doingSomething ||
+                              pickedSource == null ||
+                              !_urlValid ||
+                              userInput.trim().isEmpty ||
+                              (pickedSource!
+                                      .combinedAppSpecificSettingFormItems
+                                      .isNotEmpty &&
+                                  !additionalSettingsValid)
+                          ? null
+                          : () {
+                              settingsProvider.selectionClick();
+                              addApp(context);
+                            },
+                      // Accent fill rather than the house black-on-accent
+                      // button, so the one action that commits the form is the
+                      // loudest thing on the page. Both states are stated
+                      // explicitly: styleFrom's colours cover the enabled state
+                      // only, so without the disabled pair the button falls
+                      // back to the theme (black fill, accent text) whenever
+                      // the URL is empty or the options are invalid.
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onPrimary,
+                        disabledBackgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.35),
+                        disabledForegroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onPrimary.withValues(alpha: 0.75),
+                      ),
+                      // Text only — no leading icon; while the source is being
+                      // fetched the label gives way to the spinner rather than
+                      // sharing the button with it.
+                      child: gettingAppInfo
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              pickedSource != null
+                                  ? tr(
+                                      'addAppFromX',
+                                      args: [pickedSource!.name],
+                                    )
+                                  : tr('addThisApp'),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
                   ),
                   if (pickedSource != null) ...[
                     const SizedBox(height: 13),
@@ -835,12 +919,10 @@ class AddAppPageState extends State<AddAppPage> {
                               ],
                             ],
                             onValueChanges: (values, valid, isBuilding) {
-                              if (values.isNotEmpty &&
-                                  valid &&
-                                  !isBuilding) {
+                              if (values.isNotEmpty && valid && !isBuilding) {
                                 setState(() {
-                                  searchQuery =
-                                      values['searchSomeSources']!.trim();
+                                  searchQuery = values['searchSomeSources']!
+                                      .trim();
                                 });
                               }
                             },
@@ -854,14 +936,13 @@ class AddAppPageState extends State<AddAppPage> {
                                   width: 20,
                                   height: 20,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                    strokeWidth: 2,
+                                  ),
                                 ),
                               )
                             : IconButton(
-                                icon: const Icon(
-                                    Icons.search_rounded),
-                                visualDensity:
-                                    VisualDensity.compact,
+                                icon: const Icon(Icons.search_rounded),
+                                visualDensity: VisualDensity.compact,
                                 tooltip: tr('search'),
                                 onPressed: doingSomething
                                     ? null

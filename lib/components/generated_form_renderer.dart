@@ -151,6 +151,14 @@ class _GeneratedFormState extends State<GeneratedForm> {
       suffixIconConstraints: widget.tileMode
           ? const BoxConstraints(minWidth: 0, minHeight: 0)
           : null,
+      // Fork: in tile mode the field paints its own background, in the same
+      // shape as its outline. It used to sit inside a tile card whose clip
+      // (radius 24 at the ends of a run) cut the corners off that outline,
+      // leaving the border broken at the left and right of single-row forms.
+      filled: widget.tileMode,
+      fillColor: widget.tileMode
+          ? Theme.of(context).colorScheme.surfaceContainerHighest
+          : null,
     );
   }
 
@@ -316,10 +324,15 @@ class _GeneratedFormState extends State<GeneratedForm> {
 
   int _computeItemsHash(List<List<GeneratedFormItem>> items) {
     return Object.hashAll(
-      items.expand((row) => row.map((e) {
-        return Object.hash(e.key, e.runtimeType,
-            e is GeneratedFormTextField ? e.trailingKey : null);
-      })),
+      items.expand(
+        (row) => row.map((e) {
+          return Object.hash(
+            e.key,
+            e.runtimeType,
+            e is GeneratedFormTextField ? e.trailingKey : null,
+          );
+        }),
+      ),
     );
   }
 
@@ -392,18 +405,18 @@ class _GeneratedFormState extends State<GeneratedForm> {
     super.dispose();
   }
 
-  Widget _buildSubForm(GeneratedFormSubForm item, String fieldKey,
-      {bool isFirst = true, bool isLast = true}) {
+  Widget _buildSubForm(
+    GeneratedFormSubForm item,
+    String fieldKey, {
+    bool isFirst = true,
+    bool isLast = true,
+  }) {
     final compact = item.items.length == 1 && item.items[0].length == 1;
     final n = values[fieldKey].length;
     final List<Widget> cards = [];
     for (int i = 0; i < n; i++) {
       final internalFormKey = ValueKey(
-        generateDeterministicId(
-          n,
-          seed2: i,
-          seed3: _subFormGenerationCount,
-        ),
+        generateDeterministicId(n, seed2: i, seed3: _subFormGenerationCount),
       );
       final isLastEntry = i == n - 1;
       cards.add(
@@ -419,10 +432,9 @@ class _GeneratedFormState extends State<GeneratedForm> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: Text(
                     '${tr(item.label)} (${i + 1})',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -458,16 +470,14 @@ class _GeneratedFormState extends State<GeneratedForm> {
                   children: [
                     IconButton(
                       style: IconButton.styleFrom(
-                        foregroundColor:
-                            Theme.of(context).colorScheme.error,
+                        foregroundColor: Theme.of(context).colorScheme.error,
                       ),
                       visualDensity: VisualDensity.compact,
                       tooltip: tr('remove'),
                       icon: const Icon(Icons.delete_outline_rounded),
                       onPressed: n > 0
                           ? () {
-                              final temp =
-                                  List.from(values[fieldKey]);
+                              final temp = List.from(values[fieldKey]);
                               temp.removeAt(i);
                               values[fieldKey] = List.from(temp);
                               _subFormGenerationCount++;
@@ -479,13 +489,13 @@ class _GeneratedFormState extends State<GeneratedForm> {
                     if (isLastEntry)
                       TextButton.icon(
                         style: TextButton.styleFrom(
-                          foregroundColor:
-                              Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
                         ),
                         onPressed: () {
                           values[fieldKey].add(
-                            getDefaultValuesFromFormItems(
-                                item.items),
+                            getDefaultValuesFromFormItems(item.items),
                           );
                           _subFormGenerationCount++;
                           notifyFormChange();
@@ -514,8 +524,7 @@ class _GeneratedFormState extends State<GeneratedForm> {
                 const Spacer(),
                 TextButton.icon(
                   style: TextButton.styleFrom(
-                    foregroundColor:
-                        Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.primary,
                   ),
                   onPressed: () {
                     values[fieldKey].add(
@@ -559,6 +568,12 @@ class _GeneratedFormState extends State<GeneratedForm> {
                 : hapticSwitchOnChanged(context, (value) {
                     setState(() {
                       values[fieldKey] = value;
+                      // Fork: switching one on releases whatever it excludes.
+                      if (value) {
+                        for (final key in item.excludes) {
+                          values[key] = false;
+                        }
+                      }
                       notifyFormChange();
                     });
                   }),
@@ -602,22 +617,25 @@ class _GeneratedFormState extends State<GeneratedForm> {
           widget.items[r][0] is GeneratedFormSubForm;
       final colorScheme = Theme.of(context).colorScheme;
       final n = inputRowWidgets.length;
+      // Fork: only non-field rows get a tile card — a field draws its own
+      // outline and fill (see _fieldDecoration), and a card around it would
+      // clip that outline's corners. Runs of cards therefore round off
+      // wherever a field (or sub-form) interrupts them, not just at the ends.
+      bool isCardRow(int r) => !isSubFormRow(r) && !isFieldRow(r);
       final List<Widget> rawTiles = [];
       for (var r = 0; r < n; r++) {
-        if (isSubFormRow(r)) {
+        if (!isCardRow(r)) {
           rawTiles.add(inputRowWidgets[r]);
-        } else {
-          rawTiles.add(
-            ConnectedCard(
-              isFirst: r == 0,
-              isLast: r == n - 1,
-              color: isFieldRow(r)
-                  ? colorScheme.surfaceContainerHighest
-                  : colorScheme.surfaceContainerLow,
-              child: inputRowWidgets[r],
-            ),
-          );
+          continue;
         }
+        rawTiles.add(
+          ConnectedCard(
+            isFirst: r == 0 || !isCardRow(r - 1),
+            isLast: r == n - 1 || !isCardRow(r + 1),
+            color: colorScheme.surfaceContainerLow,
+            child: inputRowWidgets[r],
+          ),
+        );
       }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
