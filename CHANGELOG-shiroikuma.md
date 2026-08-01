@@ -3,7 +3,95 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.10+9 — current
+## 1.6.10+019 — current
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490019`.
+
+### Compare a tracked app against our own installed build (new)
+- **Three per-app options, right under Track-only**: *Compare against installed app*, *Strip from
+  the installed version (RegEx)* (default `\+\d+$`, our build counter), and *Only report genuinely
+  higher versions*. They ride in the app's additional settings, so an existing entry gains them
+  with no re-adding and they travel in the backup like every other per-app setting.
+- **The entry's installed version is read from the linked package**, with our fork suffix stripped:
+  a package reporting `1.6.10+015` makes the entry read `1.6.10`. Install a rebuilt fork and the
+  entry clears **itself** on the next check — the "mark updated" tap this arrangement used to need
+  every single time is gone.
+- **An update means genuinely newer, not merely different.** The comparator walks version segments
+  numerically (so `1.7` beats `1.6.10`, and unequal lengths compare correctly), ranks pre-releases
+  below the release they lead to (`dev`/`snapshot`/`nightly` < `alpha` < `beta` < `rc`/`pre` <
+  final, and `rc2` above `rc1`), and — crucially — **refuses to order what it cannot parse**,
+  falling back to Obtainium's plain "they differ, so it is an update". An odd version string can
+  never silently swallow a real update.
+- **Linking implies track-only**, enforced on save: an entry compared against a local build must
+  never offer to install the upstream APK over it.
+- **A searchable installed-app picker** on both the add-an-app and edit-an-app screens: icon,
+  label, package name and version per row, user-installed apps by default with a *Show system apps*
+  toggle, an *Unlink* entry, and a ✨ **Suggested** mark on packages whose stripped version already
+  matches what the source reports — usually the right fork, first row, first try. The field stays
+  typeable with a typeahead over installed package names, which is what makes it usable on TV and
+  with a hardware keyboard. It costs no extra package-manager enumeration: the picker reads the
+  snapshot the app already takes at startup.
+- **A linked entry wears the local build's face**: the fork's launcher icon in the list and on the
+  detail page, and a name that states the relationship — **`Obtainium ⇒ 白い熊 獲得`**. Tapping the
+  icon opens that local build rather than doing nothing. The stored app name is untouched, so
+  exports, notifications and the automation contract keep the plain upstream name.
+- On a device where the linked package is not installed, the entry simply behaves as a plain
+  track-only app — the last known base version stays put, and the detail page says which package it
+  is waiting for.
+
+### GitHub — follow commits instead of releases (new)
+- **A switch under *Include prereleases* and *Fallback to older releases***, with an optional
+  **branch** field (blank = the repo's default branch). For an upstream we rebase onto and build
+  ourselves, releases say nothing: the branch tip is the thing to watch.
+- The head commit is reported as a pseudo-release versioned **`<commit date>.g<8-char sha>`** —
+  deliberately the shape the `git-versioning` rule pins our forks to — with the commit date as the
+  release date and the commit message as the changelog.
+- **The comparison is by commit identity, not order.** Commits have no ordering, so being rebased
+  onto upstream's head *is* being up to date, whatever version literal surrounds it:
+  `6.3.0-alpha.2026-07-30.g5c0ed6a3+002` against `2026-07-30.g5c0ed6a3` reads as current, and moves
+  to "update" the moment upstream's tip does. Both the sortable and the older `<upstream>.g<sha>+N`
+  fork forms are recognised, since forks migrate one at a time. A `g` marker is required, so a
+  date-style version like `20260801` — valid hexadecimal — is never mistaken for a commit.
+- **Mutually exclusive with the two release options, without locking anything**: switching commit
+  following on releases them, and switching either of them on releases commit following. Whichever
+  you touch last wins. (Form switches gained an `excludes` list for this.)
+- Commit following yields no APK, so it is **inherently track-only** — enforced through a new
+  per-app source hook rather than a whole-source flag.
+
+### Versions read as versions
+- **A leading `v` is spelling, not a version difference.** It is stripped from every version shown —
+  list tile, detail page, app-info dialog, changelog dialog, update checklist, notifications — and
+  normalised before comparison, so `1.6.10` and `v1.6.10` can never read as an update. This also
+  cures the permanent phantom update on any ordinary app whose source tags releases with a `v`
+  while the OS reports the version without one.
+- **Long versions are shown in full.** A version string contains no spaces, so
+  `6.3.0-alpha.2026-07-30.g5c0ed6a3` had nowhere to wrap and was simply cut off; zero-width break
+  opportunities after each separator let it fold over up to three lines in a wider column instead.
+- The list tile shows the `installed → latest` arrow only when the app is genuinely outdated, and
+  the big Install/Update button, the update badge, the Updates filter, the bulk actions and the
+  background notifications all now ask the same single question.
+
+### Add & edit screens
+- **The bare `+` is gone.** Adding an app is now a full-width button below the URL that states what
+  it will do — **“Accept options below and Add this GitHub app”** — in bold black on accent yellow,
+  the loudest thing on the page, dimmed rather than disguised while the form is incomplete, and
+  showing a spinner in place of its label while the source is fetched.
+- The per-app options screen opens with an explicit **Save changes** button. Leaving the page always
+  saved; nothing said so.
+- **Form fields no longer have their borders clipped.** A tile-mode row was wrapped in a card that
+  clipped its child to a 24 dp superellipse while the field drew its own outline at 8 dp, so the
+  card's curve sliced the outline's corners off — visible as broken left and right edges on any
+  single-row form. Fields now paint their own fill in the same shape as their outline, and card runs
+  round off wherever a field interrupts them.
+
+### Packaging
+- **The build counter is zero-padded to three digits** in the version name and the APK filename
+  (`1.6.10+019`, never `+19`), so builds sort in build order in `~/tmp/`, in the phone's file
+  manager and in the release list. `versionCode` keeps the plain integer, and `BUILD_NUMBER` in
+  `fork.properties` stays an unpadded integer. Tags published before this point keep their old
+  spelling — nothing is ever retagged.
+
+## 1.6.10+9
 
 Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490009`.
 
