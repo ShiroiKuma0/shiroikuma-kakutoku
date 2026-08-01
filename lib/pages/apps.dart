@@ -18,6 +18,7 @@ import 'package:obtainium/pages/sk_ui_page.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/utils/nav_helper.dart';
 import 'package:provider/provider.dart';
@@ -1434,12 +1435,11 @@ class _BulkUpdateDialogState extends State<_BulkUpdateDialog> {
     final tt = Theme.of(context).textTheme;
     if (aim == null) return const SizedBox.shrink();
     final isNewInstall = aim.app.installedVersion == null;
-    final isUpdate =
-        aim.app.installedVersion != null &&
-        aim.app.installedVersion != aim.app.latestVersion;
+    final isUpdate = aim.app.installedVersion != null && skIsOutdated(aim.app);
     final versionLabel = isUpdate
-        ? '${aim.app.installedVersion} → ${aim.app.latestVersion}'
-        : aim.app.latestVersion;
+        ? '${skDisplayVersionOrNull(aim.app.installedVersion)} → '
+              '${skDisplayVersion(aim.app.latestVersion)}'
+        : skDisplayVersion(aim.app.latestVersion);
     return CheckboxListTile(
       dense: true,
       contentPadding: const EdgeInsets.only(left: 4, right: 4),

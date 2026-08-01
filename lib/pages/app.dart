@@ -10,11 +10,13 @@ import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/components/app_detail_widgets.dart';
 import 'package:obtainium/theme.dart';
+import 'package:obtainium/components/sk_installed_app_picker.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/utils/format_utils.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/core/logging/app_logger.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/utils/locale_utils.dart';
@@ -205,6 +207,7 @@ class _AppPageState extends State<AppPage> {
       a.downloadProgress,
       identityHashCode(a.icon),
       identityHashCode(a.installedInfo),
+      identityHashCode(a.linkedInfo),
       app.id,
       a.name,
       a.author,
@@ -301,17 +304,54 @@ class _AppPageState extends State<AppPage> {
     AppInMemory? app,
   ) async {
     final s = source;
-    final items = (s?.combinedAppSpecificSettingFormItems ?? []).map((row) {
-      row = row.map((e) {
-        if (app?.app.additionalSettings[e.key] != null) {
-          e.value = app?.app.additionalSettings[e.key];
-        }
-        return e;
-      }).toList();
-      return row;
-    }).toList();
-
     Map<String, dynamic> values = {};
+
+    // Fork: the "compare against installed app" row gets an app-picker button
+    // (and a typeahead over installed packages, which is what makes the row
+    // usable on TV and with a hardware keyboard). Picking rebuilds the form
+    // with a fresh trailingKey — GeneratedForm re-initialises when the item
+    // hash changes, which is how the new value reaches the field.
+    var pickerRevision = 0;
+
+    final List<String> packageOptions =
+        skInstalledPackages
+            .where((p) => p.packageName != null && skIsUserApp(p))
+            .map((p) => p.packageName!)
+            .toList()
+          ..sort();
+
+    List<List<GeneratedFormItem>> buildItems(VoidCallback onPicked) {
+      return (s?.combinedAppSpecificSettingFormItems ?? []).map((row) {
+        return row.map((e) {
+          // Seed from the live form state so an edit made before opening the
+          // picker survives the rebuild, falling back to the saved settings.
+          final current = values.containsKey(e.key)
+              ? values[e.key]
+              : app?.app.additionalSettings[e.key];
+          if (current != null) {
+            e.value = current;
+          }
+          if (e.key != skLinkedPackageKey || e is! GeneratedFormTextField) {
+            return e;
+          }
+          return GeneratedFormTextField(
+            e.key,
+            label: e.label,
+            value: (e.value ?? '') as String,
+            required: false,
+            hint: e.hint,
+            autoCompleteOptions: packageOptions,
+            trailingKey: 'linkedPicker$pickerRevision',
+            trailing: IconButton(
+              icon: const Icon(Icons.apps),
+              tooltip: tr('pickInstalledApp'),
+              onPressed: onPicked,
+            ),
+          );
+        }).toList();
+      }).toList();
+    }
+
     return Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
         builder: (ctx) => PopScope<Map<String, dynamic>>(
@@ -321,35 +361,74 @@ class _AppPageState extends State<AppPage> {
             if (didPop) return;
             Navigator.of(ctx).pop(values);
           },
-          child: Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            body: CustomScrollView(
-              slivers: [
-                SliverAppBar(
-                  pinned: true,
-                  automaticallyImplyLeading: false,
-                  title: Text(
-                    tr('additionalOptsFor', args: [app?.name ?? tr('app')]),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      0,
-                      16,
-                      MediaQuery.of(context).padding.bottom,
-                    ),
-                    child: GeneratedForm(
-                      tileMode: true,
-                      items: items,
-                      onValueChanges: (v, valid, isBuilding) {
-                        values = v;
-                      },
+          child: StatefulBuilder(
+            builder: (ctx, setFormState) => Scaffold(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              body: CustomScrollView(
+                slivers: [
+                  SliverAppBar(
+                    pinned: true,
+                    automaticallyImplyLeading: false,
+                    title: Text(
+                      tr('additionalOptsFor', args: [app?.name ?? tr('app')]),
                     ),
                   ),
-                ),
-              ],
+                  // Fork: leaving the page already saves, but nothing said so
+                  // — this states the outcome and gives an explicit way out.
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            settingsProvider.selectionClick();
+                            Navigator.of(ctx).pop(values);
+                          },
+                          icon: const Icon(Icons.check_rounded),
+                          label: Text(tr('saveChanges')),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        0,
+                        16,
+                        MediaQuery.of(context).padding.bottom,
+                      ),
+                      child: GeneratedForm(
+                        tileMode: true,
+                        items: buildItems(() async {
+                          final picked = await showSkInstalledAppPicker(
+                            ctx,
+                            selected:
+                                (values[skLinkedPackageKey] ??
+                                        app
+                                            ?.app
+                                            .additionalSettings[skLinkedPackageKey])
+                                    as String?,
+                            matchApp: app?.app,
+                          );
+                          if (picked == null) return;
+                          setFormState(() {
+                            values[skLinkedPackageKey] = picked;
+                            pickerRevision++;
+                          });
+                        }),
+                        onValueChanges: (v, valid, isBuilding) {
+                          values = v;
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -367,7 +446,7 @@ class _AppPageState extends State<AppPage> {
       final Map<String, dynamic> originalSettings = app.app.additionalSettings;
       final savedValues = Map<String, dynamic>.from(values);
       app.app = app.app.copyWith(additionalSettings: savedValues);
-      if (s?.enforceTrackOnly == true) {
+      if (s?.enforceTrackOnlyFor(app.app.additionalSettings) == true) {
         app.app = app.app.copyWith(
           additionalSettings: Map<String, dynamic>.from(
             app.app.additionalSettings,
@@ -375,6 +454,19 @@ class _AppPageState extends State<AppPage> {
         );
         if (context.mounted) {
           showMessage(tr('appsFromSourceAreTrackOnly'), context);
+        }
+      }
+      // Fork: an app compared against a local build must never install the
+      // upstream APK over it, so linking implies track-only.
+      if (skLinkedPackage(app.app) != null &&
+          !app.app.settings.getBool('trackOnly')) {
+        app.app = app.app.copyWith(
+          additionalSettings: Map<String, dynamic>.from(
+            app.app.additionalSettings,
+          )..['trackOnly'] = true,
+        );
+        if (context.mounted) {
+          showMessage(tr('linkedAppsAreTrackOnly'), context);
         }
       }
       final versionDetectionEnabled =
@@ -550,11 +642,10 @@ class _AppPageState extends State<AppPage> {
     bool areDownloadsRunning,
   ) {
     final installed = app?.app.installedVersion;
-    final latest = app?.app.latestVersion;
     final hasAction =
         app != null &&
         !updating &&
-        (installed == null || installed != latest) &&
+        (installed == null || skIsOutdated(app.app)) &&
         !areDownloadsRunning;
     final trackOnly = app?.app.settings.getBool('trackOnly') == true;
     return FilledButton.icon(
@@ -639,20 +730,23 @@ class _AppPageState extends State<AppPage> {
           icon: const Icon(Icons.more_horiz),
           tooltip: tr('more'),
         ),
-      if (app?.app.installedVersion != null &&
-          app?.app.installedVersion != app?.app.latestVersion &&
+      if (app != null &&
+          app.app.installedVersion != null &&
+          skIsOutdated(app.app) &&
+          skLinkedPackage(app.app) == null &&
           !isVersionDetectionStandard &&
           !trackOnly)
         IconButton(
-          onPressed: app?.downloadProgress != null || updating
+          onPressed: app.downloadProgress != null || updating
               ? null
               : () => showMarkUpdatedDialog(context),
           tooltip: tr('markUpdated'),
           icon: const Icon(Icons.done),
         ),
       if ((!isVersionDetectionStandard || trackOnly) &&
-          app?.app.installedVersion != null &&
-          app?.app.installedVersion == app?.app.latestVersion)
+          app != null &&
+          app.app.installedVersion != null &&
+          !skIsOutdated(app.app))
         IconButton(
           onPressed: updating
               ? null
@@ -806,7 +900,10 @@ class _AppPageState extends State<AppPage> {
 
   Widget _buildAppIcon(AppInMemory? app) {
     final icon = AppIcon(bytes: app?.icon, size: 56, radius: 14);
-    if (app == null || app.installedInfo == null) return icon;
+    // Fork: for a linked app this is the local build's icon, so tapping it
+    // opens that package rather than the (uninstalled) tracked one.
+    final openPackageId = app?.displayPackageId;
+    if (app == null || openPackageId == null) return icon;
     return Semantics(
       button: true,
       label: app.name,
@@ -814,7 +911,7 @@ class _AppPageState extends State<AppPage> {
         borderRadius: BorderRadius.circular(14),
         onTap: () {
           settingsProvider.lightImpact();
-          packageManager.openApp(app.app.id);
+          packageManager.openApp(openPackageId);
         },
         child: icon,
       ),
@@ -860,7 +957,11 @@ class _AppPageState extends State<AppPage> {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final trackOnly = app?.app.settings.getBool('trackOnly') == true;
-    final pseudo = app?.app != null && isVersionPseudo(app!.app);
+    final linkedPackage = app?.app != null ? skLinkedPackage(app!.app) : null;
+    final linkedRawVersion = app?.linkedInfo?.versionName;
+    final pseudo =
+        app?.app != null && isVersionPseudo(app!.app) && linkedPackage == null;
+    final realVersion = app?.installedInfo?.versionName;
     final apkCount = app?.app.apkUrls.length ?? 0;
     final changeLogFn = app != null ? getChangeLogFn(context, app.app) : null;
     return [
@@ -868,14 +969,36 @@ class _AppPageState extends State<AppPage> {
         true,
         false,
         children: [
-          if (trackOnly) _detailNote(tr('xIsTrackOnly', args: [tr('app')])),
-          if (pseudo) _detailNote(tr('pseudoVersionInUse')),
+          if (trackOnly && linkedPackage == null)
+            _detailNote(tr('xIsTrackOnly', args: [tr('app')])),
+          if (linkedPackage != null)
+            _detailNote(
+              linkedRawVersion != null
+                  ? tr(
+                      'linkedVersionNote',
+                      args: [
+                        linkedPackage,
+                        skDisplayVersion(linkedRawVersion),
+                        skDisplayVersionOrNull(
+                              skStripVersion(linkedRawVersion, app!.app),
+                            ) ??
+                            '',
+                      ],
+                    )
+                  : tr('linkedAppNotInstalled', args: [linkedPackage]),
+            ),
+          if (pseudo)
+            _detailNote(
+              realVersion != null
+                  ? '${tr('pseudoVersionInUse')} (OS installed ${skDisplayVersion(realVersion)})'
+                  : tr('pseudoVersionInUse'),
+            ),
           () {
             String l = appInstalledVersionText(app?.app);
-            final upToDate =
-                app?.app.installedVersion == app?.app.latestVersion;
+            final upToDate = app == null || !skIsOutdated(app.app);
             if (!upToDate) {
-              l += '\n${app?.app.latestVersion} ${tr('latest')}';
+              l +=
+                  '\n${skDisplayVersion(app.app.latestVersion)} ${tr('latest')}';
             }
             return Text(
               l,
@@ -1219,10 +1342,12 @@ class _AppPageState extends State<AppPage> {
     final AppInMemory? app = cachedApp(
       context.select<AppsProvider, AppInMemory?>((p) => p.apps[widget.appId]),
     );
+    final installed = app?.app.installedVersion;
     if (app != null &&
         app.downloadProgress == null &&
         !updating &&
-        !areDownloadsRunning) {
+        !areDownloadsRunning &&
+        (installed == null || skIsOutdated(app.app))) {
       _maybeProbeDownloadSize(app);
     }
     final source = this.source;
