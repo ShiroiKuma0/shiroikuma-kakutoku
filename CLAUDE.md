@@ -34,13 +34,16 @@ installable side-by-side with upstream Obtainium.
   (leave the submodule uninitialized).
 - **Build env:** `export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/home/shiroikuma/android-sdk`.
 - **Build:** `./build-fork.sh` (release-signed, `normal` flavor, arm64-only; copies the APK to
-  `~/tmp/shiroikuma-kakutoku_<VERSION_NAME>+<BUILD_NUMBER>_arm64-v8a.apk` and bumps `BUILD_NUMBER`).
+  `~/tmp/shiroikuma-kakutoku_<VERSION_NAME>+<NNN>_arm64-v8a.apk` and bumps `BUILD_NUMBER`).
   Upstream's own `build.sh` is their release pipeline — never use or overwrite it.
 - **Versioning** (`fork.properties` at repo root, read by `android/app/build.gradle.kts`):
   `VERSION_NAME` / `VERSION_CODE` track upstream (pubspec `version: <name>+<code>`, e.g.
   `1.6.9+2348`); `BUILD_NUMBER` is our increment (bumped every build, reset to 1 on each new
-  upstream version). Fork `versionName = "<VERSION_NAME>+<BUILD_NUMBER>"`,
-  `versionCode = VERSION_CODE * 10000 + BUILD_NUMBER` (Obtainium 2348 → `23480001`, …).
+  upstream version). Fork `versionName = "<VERSION_NAME>+<NNN>"` — the counter is **zero-padded
+  to three digits** in the name and the APK filename (`1.6.10+015`, never `+15`), so both sort in
+  build order; see the global **`after-build`** rule. `BUILD_NUMBER` itself stays a plain integer
+  in `fork.properties`, and `versionCode = VERSION_CODE * 10000 + BUILD_NUMBER` uses it unpadded
+  (Obtainium 2348 → `23480001`, …).
   `pubspec.yaml`'s `version:` stays upstream's — never edit it for fork builds.
 - **Signing:** release signed from gitignored `android/key.properties` →
   `~/.android-keystores/shiroikuma-kakutoku.jks` (alias `kakutoku`). Password recorded in 白い熊's

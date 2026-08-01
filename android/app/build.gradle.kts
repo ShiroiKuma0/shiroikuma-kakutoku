@@ -36,18 +36,21 @@ kotlin {
 
 // shiroikuma-kakutoku fork: identity + versioning from ../fork.properties (repo root).
 // VERSION_NAME / VERSION_CODE track upstream Obtainium; BUILD_NUMBER is our +N increment.
-// forkVersionName = "<VERSION_NAME>+<BUILD_NUMBER>"; forkVersionCode = VERSION_CODE * 10000 + BUILD_NUMBER.
+// forkVersionName = "<VERSION_NAME>+<BUILD_NUMBER, 3 digits>"; the counter is zero-padded so
+// version strings and APK filenames sort in build order (+010 after +009, not before +9) — the
+// global after-build rule. forkVersionCode = VERSION_CODE * 10000 + BUILD_NUMBER (plain int).
 val forkProperties = Properties()
 val forkPropertiesFile = rootProject.file("../fork.properties")
 if (forkPropertiesFile.exists()) {
     forkPropertiesFile.reader(Charsets.UTF_8).use { forkProperties.load(it) }
 }
 val forkAppId = forkProperties.getProperty("APP_ID") ?: "shiroikuma.kakutoku"
+val forkBuildNumber = (forkProperties.getProperty("BUILD_NUMBER") ?: "1").toInt()
 val forkVersionName =
-    "${forkProperties.getProperty("VERSION_NAME") ?: flutterVersionName}+${forkProperties.getProperty("BUILD_NUMBER") ?: "1"}"
+    "${forkProperties.getProperty("VERSION_NAME") ?: flutterVersionName}+${"%03d".format(forkBuildNumber)}"
 val forkVersionCode =
     (forkProperties.getProperty("VERSION_CODE") ?: flutterVersionCode).toInt() * 10000 +
-        (forkProperties.getProperty("BUILD_NUMBER") ?: "1").toInt()
+        forkBuildNumber
 
 android {
     namespace = "dev.imranr.obtainium"
