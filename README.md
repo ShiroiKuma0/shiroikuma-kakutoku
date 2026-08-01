@@ -6,18 +6,35 @@
 
 **Get app updates straight from the source — in black and yellow.**
 
-A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with **major additions**: a granular
-black-yellow 白い熊 獲得 UI theming page (colours, fonts, borders, sizes — all live-previewed),
-**category Export/Import** of the whole setup, **headless backup on demand** over a token-gated
-intent, a tightened edge-to-edge main screen, and house-styled action buttons.
+A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with **major additions**: tracking an
+upstream project while comparing it against **your own build of it** (releases *or* git commits), a
+granular black-yellow 白い熊 獲得 UI theming page (colours, fonts, borders, sizes — all
+live-previewed), **category Export/Import** of the whole setup, **headless backup on demand** over a
+token-gated intent, and a tightened edge-to-edge main screen.
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+9`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+019`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
 ---
+
+## 🔗 Track upstream, compare against your own build
+For every project you follow only because you patch and build the fork yourself, an entry can be
+**linked to the build installed on this phone**. Its "installed" version is then read from that
+package with the fork's `+N` build counter stripped, so upstream `1.6.10` and your
+`1.6.10+015` are recognised as the same release — and an update is reported only when upstream is
+**genuinely higher**, never merely different. Rebuild your fork, install it, and the entry clears
+itself; the endless "mark updated" tapping is gone. Pick the local build from a searchable dialog of
+installed apps (icon, label, package, version, and a ✨ mark on the one that already matches), and
+the entry then wears **that build's icon** and reads `Obtainium ⇒ 白い熊 獲得`.
+
+## 🌱 Follow git commits, not just releases
+For a GitHub project whose releases stand still for months while its branch moves daily, follow
+**commits** instead: the head is reported as `<commit date>.g<8-char sha>` — exactly the shape our
+git-versioned forks carry — and "up to date" means *your build is rebased onto that commit*. No
+version arithmetic, no false updates when a tag is re-cut; the sha decides.
 
 ## 🎨 白い熊 獲得 UI — granular theming page
 A dedicated theming screen in the sister-repo house style, reached from the top of Settings **or by
@@ -99,5 +116,6 @@ cd shiroikuma-kakutoku
 ./build-fork.sh    # signed release APK -> ~/tmp/shiroikuma-kakutoku_<version>_arm64-v8a.apk
 ```
 Versioning: `VERSION_NAME`/`VERSION_CODE` in `fork.properties` track upstream Obtainium;
-`BUILD_NUMBER` is the fork increment. Fork `versionName = "<VERSION_NAME>+<BUILD_NUMBER>"`,
-`versionCode = VERSION_CODE * 10000 + BUILD_NUMBER`.
+`BUILD_NUMBER` is the fork increment. Fork `versionName = "<VERSION_NAME>+<NNN>"` — the counter is
+zero-padded to three digits so builds and tags sort in build order — and
+`versionCode = VERSION_CODE * 10000 + BUILD_NUMBER` uses it unpadded.
