@@ -22,6 +22,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/models/app.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/utils/version_normalization.dart';
 
 const String _defaultMatchGroup = '0';
@@ -385,10 +386,18 @@ String? reconcileTrackedVersion({
 /// common non-strict standard format (see [compareVersionsNumerically]) and the
 /// "hide downgrades" setting is enabled — otherwise a downgrade is still
 /// presented as an update.
+/// Fork: [skIsOutdated] owns the "is this actually a newer release?" question
+/// — bare build-variant suffixes, pushes waved through with "set as updated",
+/// commit identity for entries following an upstream head, and the
+/// linked-package "only if newer" rule all live there. It is consulted first
+/// so those rules govern every call site upstream routes through here.
 bool isAppUpdateable(App app, SettingsProvider settingsProvider) {
   final installed = app.installedVersion;
   final latest = app.latestVersion;
   if (installed == null || installed == latest) {
+    return false;
+  }
+  if (!skIsOutdated(app)) {
     return false;
   }
   if (!settingsProvider.hideDowngrades) {

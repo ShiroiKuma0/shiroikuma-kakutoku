@@ -220,7 +220,7 @@ class SourceProvider {
     bool inferAppIdIfOptional = false,
   }) async {
     additionalSettings = Map<String, dynamic>.from(additionalSettings);
-    if (trackOnlyOverride || source.enforceTrackOnly) {
+    if (trackOnlyOverride || source.enforceTrackOnlyFor(additionalSettings)) {
       additionalSettings['trackOnly'] = true;
     }
     final trackOnly = additionalSettings['trackOnly'] == true;

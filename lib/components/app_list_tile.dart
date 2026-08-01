@@ -14,6 +14,7 @@ import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/utils/format_utils.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/utils/nav_helper.dart';
 // AppsFilter and AppListBuilder are defined below in this file.
@@ -37,7 +38,7 @@ void showChangeLogDialog(
       return GeneratedFormModal(
         title: tr('changes'),
         items: const [],
-        message: app.latestVersion,
+        message: skDisplayVersion(app.latestVersion),
         additionalWidgets: [
           changesUrl != null
               ? LinkText(
@@ -124,6 +125,11 @@ VoidCallback? getChangeLogFn(BuildContext context, App app) {
 class AppIconWidget extends StatefulWidget {
   final String appId;
   final bool installed;
+
+  /// Fork: the package a tap should launch — the app's own when installed,
+  /// or the local build a linked app is compared against. Null = not
+  /// launchable.
+  final String? openPackageId;
   final AppsProvider appsProvider;
   final double size;
 
@@ -133,6 +139,7 @@ class AppIconWidget extends StatefulWidget {
     required this.installed,
     required this.appsProvider,
     this.size = 44,
+    this.openPackageId,
   });
 
   @override
@@ -164,8 +171,8 @@ class _AppIconWidgetState extends State<AppIconWidget> {
     return Semantics(
       label: name,
       button: true,
-      onTap: widget.installed
-          ? () => packageManager.openApp(widget.appId)
+      onTap: widget.openPackageId != null
+          ? () => packageManager.openApp(widget.openPackageId!)
           : null,
       onLongPress: () {
         NavHelper.pushAppPage(
@@ -184,8 +191,9 @@ class _AppIconWidgetState extends State<AppIconWidget> {
           ),
         ),
         onDoubleTap: () {
-          if (widget.installed) {
-            packageManager.openApp(widget.appId);
+          final target = widget.openPackageId;
+          if (target != null) {
+            packageManager.openApp(target);
           }
         },
         onLongPress: () {
@@ -326,12 +334,15 @@ class AppListTile extends StatelessWidget {
     final showChangesFn = getChangeLogFn(context, _app);
     final hasUpdate = isAppUpdateable(_app, settingsProvider);
     final isTV = settingsProvider.isTV;
+    // Fork: a linked app's installed version is owned by the linked package,
+    // so "mark updated" would be undone by the next save — hide the button.
+    final canMarkUpdated = skLinkedPackage(_app) == null;
     final Widget trailingRow = LayoutBuilder(
       builder: (context, constraints) => Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (hasUpdate) ...[
+          if (hasUpdate && canMarkUpdated) ...[
             // On TV, keep the tile a single focus stop: updating is available
             // from the detail pane and the list's update banner.
             if (isTV)
@@ -345,7 +356,7 @@ class AppListTile extends StatelessWidget {
               child: _VersionLabel(
                 appInMemory: appInMemory,
                 settingsProvider: settingsProvider,
-                maxWidth: math.min(constraints.maxWidth / 3, 200),
+                maxWidth: math.min(constraints.maxWidth / 2, 260),
                 showChangesFn: showChangesFn,
               ),
             )
@@ -353,7 +364,7 @@ class AppListTile extends StatelessWidget {
             _VersionLabel(
               appInMemory: appInMemory,
               settingsProvider: settingsProvider,
-              maxWidth: math.min(constraints.maxWidth / 3, 200),
+              maxWidth: math.min(constraints.maxWidth / 2, 260),
               showChangesFn: showChangesFn,
             ),
         ],
@@ -482,7 +493,8 @@ class AppListTile extends StatelessWidget {
                     ? null
                     : AppIconWidget(
                         appId: _app.id,
-                        installed: appInMemory.installedInfo != null,
+                        installed: appInMemory.displayPackageId != null,
+                        openPackageId: appInMemory.displayPackageId,
                         appsProvider: appsProvider,
                         size: isCompact ? 36 : 44,
                       ),
@@ -811,8 +823,7 @@ class AppListBuilder {
         : const <String>[];
 
     return apps.where((app) {
-      if (app.app.installedVersion == app.app.latestVersion &&
-          !(filter.includeUptodate)) {
+      if (!skIsOutdated(app.app) && !(filter.includeUptodate)) {
         return false;
       }
       if (app.app.installedVersion != null &&
@@ -1011,7 +1022,10 @@ class _VersionLabel extends StatelessWidget {
                     ? TextDirection.ltr
                     : Directionality.of(context),
                 child: Text(
-                  installedVersionText(app),
+                  // Fork: shown in full — folded over up to three lines rather
+                  // than cut off, which long git-versioned strings always were.
+                  skWrappableVersion(installedVersionText(app)),
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
                   style: TextStyle(
@@ -1063,14 +1077,15 @@ class _VersionLabel extends StatelessWidget {
   }
 
   bool isVersionUpdate(App app) {
-    final installed = app.installedVersion;
-    final latest = app.latestVersion;
-    return installed != null && installed != latest;
+    // Fork: our own outdated test (linked-package comparison, git-version
+    // normalization) rather than a plain string inequality.
+    final installed = skDisplayVersionOrNull(app.installedVersion);
+    return installed != null && skIsOutdated(app);
   }
 
   String installedVersionText(App app) {
-    final installed = app.installedVersion;
-    final latest = app.latestVersion;
+    final installed = skDisplayVersionOrNull(app.installedVersion);
+    final latest = skDisplayVersion(app.latestVersion);
     if (isVersionUpdate(app)) {
       return '$installed → $latest';
     }

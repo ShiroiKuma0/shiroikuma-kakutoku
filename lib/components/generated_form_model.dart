@@ -94,11 +94,18 @@ class GeneratedFormDropdown extends GeneratedFormItem {
 class GeneratedFormSwitch extends GeneratedFormItem {
   bool disabled;
 
+  /// Fork: keys of other switches this one turns off when it is switched on.
+  /// Nothing is ever locked — each side of an exclusive pair simply releases
+  /// the other, so whichever the user touches last wins. Used for settings
+  /// that cannot both apply (GitHub's release options vs. following commits).
+  final List<String> excludes;
+
   GeneratedFormSwitch(
     super.key, {
     super.label,
     bool super.value = false,
     this.disabled = false,
+    this.excludes = const [],
     List<String? Function(bool value)> super.additionalValidators = const [],
   });
 
@@ -116,6 +123,7 @@ class GeneratedFormSwitch extends GeneratedFormItem {
       label: label,
       value: value,
       disabled: disabled,
+      excludes: List.from(excludes),
       additionalValidators: List.from(additionalValidators),
     );
   }
