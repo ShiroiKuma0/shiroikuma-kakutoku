@@ -150,6 +150,14 @@ class _GeneratedFormState extends State<GeneratedForm> {
       suffixIconConstraints: widget.tileMode
           ? const BoxConstraints(minWidth: 0, minHeight: 0)
           : null,
+      // Fork: in tile mode the field paints its own background, in the same
+      // shape as its outline. It used to sit inside a tile card whose clip
+      // (radius 24 at the ends of a run) cut the corners off that outline,
+      // leaving the border broken at the left and right of single-row forms.
+      filled: widget.tileMode,
+      fillColor: widget.tileMode
+          ? Theme.of(context).colorScheme.surfaceContainerHighest
+          : null,
     );
   }
 
@@ -559,6 +567,12 @@ class _GeneratedFormState extends State<GeneratedForm> {
                 : hapticSwitchOnChanged(context, (value) {
                     setState(() {
                       values[fieldKey] = value;
+                      // Fork: switching one on releases whatever it excludes.
+                      if (value) {
+                        for (final key in item.excludes) {
+                          values[key] = false;
+                        }
+                      }
                       notifyFormChange();
                     });
                   }),
@@ -602,22 +616,25 @@ class _GeneratedFormState extends State<GeneratedForm> {
           widget.items[r][0] is GeneratedFormSubForm;
       final colorScheme = Theme.of(context).colorScheme;
       final n = inputRowWidgets.length;
+      // Fork: only non-field rows get a tile card — a field draws its own
+      // outline and fill (see _fieldDecoration), and a card around it would
+      // clip that outline's corners. Runs of cards therefore round off
+      // wherever a field (or sub-form) interrupts them, not just at the ends.
+      bool isCardRow(int r) => !isSubFormRow(r) && !isFieldRow(r);
       final List<Widget> rawTiles = [];
       for (var r = 0; r < n; r++) {
-        if (isSubFormRow(r)) {
+        if (!isCardRow(r)) {
           rawTiles.add(inputRowWidgets[r]);
-        } else {
-          rawTiles.add(
-            ConnectedCard(
-              isFirst: r == 0,
-              isLast: r == n - 1,
-              color: isFieldRow(r)
-                  ? colorScheme.surfaceContainerHighest
-                  : colorScheme.surfaceContainerLow,
-              child: inputRowWidgets[r],
-            ),
-          );
+          continue;
         }
+        rawTiles.add(
+          ConnectedCard(
+            isFirst: r == 0 || !isCardRow(r - 1),
+            isLast: r == n - 1 || !isCardRow(r + 1),
+            color: colorScheme.surfaceContainerLow,
+            child: inputRowWidgets[r],
+          ),
+        );
       }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
