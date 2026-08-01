@@ -4,14 +4,16 @@ import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:provider/provider.dart';
 
 String appInstalledVersionText(App? app) {
   final installed = app?.installedVersion;
-  if (installed == null) return tr('notInstalled');
-  final upToDate = installed == app?.latestVersion;
-  return '$installed ${tr('installed')}${upToDate ? ' / ${tr('latest')}' : ''}';
+  if (installed == null || app == null) return tr('notInstalled');
+  final upToDate = !skIsOutdated(app);
+  return '${skDisplayVersion(installed)} ${tr('installed')}'
+      '${upToDate ? ' / ${tr('latest')}' : ''}';
 }
 
 class AppInfoDialog extends StatelessWidget {

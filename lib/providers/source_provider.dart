@@ -444,6 +444,11 @@ abstract class AppSource {
     return app;
   }
 
+  /// Whether apps from this source must be track-only. Sources that decide it
+  /// per app (GitHub's commit tracking, which yields no APKs) override this.
+  bool enforceTrackOnlyFor(Map<String, dynamic> additionalSettings) =>
+      enforceTrackOnly;
+
   Future<Map<String, dynamic>> buildMergedSettings(
     Map<String, dynamic> additionalSettings,
     SettingsProvider settingsProvider,
@@ -562,6 +567,33 @@ abstract class AppSource {
   /// Some additional data may be needed for Apps regardless of Source
   List<List<GeneratedFormItem>> get _commonAppSettingFormItems => [
     [GeneratedFormSwitch('trackOnly', label: tr('trackOnly'))],
+    // Fork: monitor an upstream source but compare against the local build of
+    // it (our fork APK) — see lib/providers/sk_linked_version.dart. The App
+    // page fills in the picker button and the autocomplete list.
+    [
+      GeneratedFormTextField(
+        'linkedInstalledPackage',
+        label: tr('linkedInstalledApp'),
+        required: false,
+        hint: tr('notLinked'),
+      ),
+    ],
+    [
+      GeneratedFormTextField(
+        'linkedVersionStripRegEx',
+        label: tr('linkedVersionStripRegEx'),
+        required: false,
+        hint: r'\+\d+$',
+        additionalValidators: [(value) => regExValidator(value)],
+      ),
+    ],
+    [
+      GeneratedFormSwitch(
+        'updateOnlyIfNewer',
+        label: tr('updateOnlyIfNewer'),
+        value: true,
+      ),
+    ],
     [
       GeneratedFormTextField(
         'versionExtractionRegEx',
@@ -1064,7 +1096,7 @@ class SourceProvider {
     bool inferAppIdIfOptional = false,
   }) async {
     additionalSettings = Map<String, dynamic>.from(additionalSettings);
-    if (trackOnlyOverride || source.enforceTrackOnly) {
+    if (trackOnlyOverride || source.enforceTrackOnlyFor(additionalSettings)) {
       additionalSettings['trackOnly'] = true;
     }
     final trackOnly = additionalSettings['trackOnly'] == true;

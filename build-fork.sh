@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Build the signed release APK of shiroikuma-kakutoku (白い熊 獲得, Obtainium fork),
-# copy it to ~/tmp/shiroikuma-kakutoku_<VERSION_NAME>+<BUILD_NUMBER>_arm64-v8a.apk,
+# copy it to ~/tmp/shiroikuma-kakutoku_<VERSION_NAME>+<BUILD_NUMBER, 3 digits>_arm64-v8a.apk,
 # then bump BUILD_NUMBER in fork.properties.
 #
 # (Upstream's own build.sh is untouched — it drives their multi-flavor release
 # pipeline; this script is the fork's build entry point.)
 #
 # Versioning: fork.properties drives android/app/build.gradle.kts —
-#   versionName = "<VERSION_NAME>+<BUILD_NUMBER>"
+#   versionName = "<VERSION_NAME>+<BUILD_NUMBER, zero-padded to 3 digits>"
 #   versionCode = VERSION_CODE * 10000 + BUILD_NUMBER
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -25,7 +25,8 @@ BUILD_NUMBER=$(grep '^BUILD_NUMBER=' fork.properties | cut -d= -f2)
     --dart-define=APP_VERSION="$VERSION_NAME"
 
 OUT=build/app/outputs/flutter-apk/app-normal-release.apk
-APK="$HOME/tmp/shiroikuma-kakutoku_${VERSION_NAME}+${BUILD_NUMBER}_arm64-v8a.apk"
+BUILD_NUMBER_PADDED=$(printf '%03d' "$BUILD_NUMBER")
+APK="$HOME/tmp/shiroikuma-kakutoku_${VERSION_NAME}+${BUILD_NUMBER_PADDED}_arm64-v8a.apk"
 cp "$OUT" "$APK"
 
 sed -i "s/^BUILD_NUMBER=.*/BUILD_NUMBER=$((BUILD_NUMBER + 1))/" fork.properties

@@ -21,6 +21,7 @@ import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/providers/logs_provider.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_fgbg/flutter_fgbg.dart';
 import 'package:obtainium/providers/source_provider.dart';
@@ -71,11 +72,23 @@ class DownloadState {
   int? totalBytes;
 }
 
+/// Sentinel for [AppInMemory.copyWith]'s `linkedInfo`, so an explicit null
+/// (link removed) is not confused with "not provided".
+const Object _unsetLinkedInfo = Object();
+
 /// Runtime wrapper for [App] holding download state and OS package info.
 class AppInMemory {
   late App app;
   final DownloadState download;
   PackageInfo? installedInfo;
+
+  /// Fork: OS info of the package this app is linked to for version
+  /// comparison (see sk_linked_version.dart). Null unless a link is set and
+  /// that package is installed.
+  PackageInfo? linkedInfo;
+
+  /// Fork: launcher label of [linkedInfo], shown after the source's own name.
+  String? linkedLabel;
   Uint8List? icon;
   String? sourceType;
 
@@ -96,6 +109,8 @@ class AppInMemory {
     this.installedInfo,
     this.icon, {
     this.sourceType,
+    this.linkedInfo,
+    this.linkedLabel,
     DownloadState? download,
   }) : download =
            download ?? (DownloadState()..progress.value = downloadProgress);
@@ -106,25 +121,47 @@ class AppInMemory {
     installedInfo,
     icon,
     sourceType: sourceType,
+    linkedInfo: linkedInfo,
+    linkedLabel: linkedLabel,
     download: download,
   );
 
+  /// [linkedInfo] uses a sentinel rather than `??` so that clearing a removed
+  /// link (passing null) is distinguishable from leaving it untouched.
   AppInMemory copyWith({
     App? app,
     PackageInfo? installedInfo,
     Uint8List? icon,
     String? sourceType,
+    Object? linkedInfo = _unsetLinkedInfo,
+    Object? linkedLabel = _unsetLinkedInfo,
   }) => AppInMemory(
     app ?? this.app,
     downloadProgress,
     installedInfo ?? this.installedInfo,
     icon ?? this.icon,
     sourceType: sourceType ?? this.sourceType,
+    linkedInfo: identical(linkedInfo, _unsetLinkedInfo)
+        ? this.linkedInfo
+        : linkedInfo as PackageInfo?,
+    linkedLabel: identical(linkedLabel, _unsetLinkedInfo)
+        ? this.linkedLabel
+        : linkedLabel as String?,
     download: download,
   );
 
-  String get name => app.finalName;
+  /// Fork: a linked app is shown as `<source app> ⇒ <local build>`, e.g.
+  /// "Obtainium ⇒ 白い熊 獲得" — the entry tracks the former and compares
+  /// against the latter.
+  String get name => linkedLabel != null && linkedLabel!.isNotEmpty
+      ? '${app.finalName} $skLinkArrow $linkedLabel'
+      : app.finalName;
   String get author => app.overrideAuthor ?? app.finalAuthor;
+
+  /// Fork: the package the icon represents and opens on tap — the app's own
+  /// when installed, otherwise the linked local build.
+  String? get displayPackageId =>
+      installedInfo != null ? app.id : linkedInfo?.packageName;
 
   bool get needsRefreshBeforeDownload =>
       app.settings.getBool('refreshBeforeDownload') ||

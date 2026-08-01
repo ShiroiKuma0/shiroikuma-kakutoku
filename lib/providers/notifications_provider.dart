@@ -11,6 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:obtainium/main.dart';
 import 'package:obtainium/providers/apps_provider.dart' show formatDownloadSize;
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 
 /// Prefix for the download-notification Cancel action id; the app ID is appended
@@ -64,7 +65,7 @@ String _buildUpdateMessage(
 }) {
   if (updates.isEmpty) return emptyKey != null ? tr(emptyKey) : '';
   final name = updates[0].finalName;
-  final version = updates[0].latestVersion;
+  final version = skDisplayVersion(updates[0].latestVersion);
   if (updates.length == 1) {
     final args = includeVersion ? [name, version] : [name];
     return tr(singleKey, args: args);

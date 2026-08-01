@@ -14,6 +14,7 @@ import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -101,10 +102,26 @@ extension AppsProviderLifecycle on AppsProvider {
 
   /// Reconciles reported vs. real installed/latest versions for [app].
   /// Returns the modified app if any corrections were made, or null.
+  ///
+  /// [linkedInfo] is the OS info of the package a fork entry is linked to for
+  /// version comparison (see sk_linked_version.dart), if any.
   App? getCorrectedInstallStatusAppIfPossible(
     App app,
-    PackageInfo? installedInfo,
-  ) {
+    PackageInfo? installedInfo, {
+    PackageInfo? linkedInfo,
+  }) {
+    // Fork: a linked app takes its installed version straight from the linked
+    // package (fork build counter stripped) and skips the standard
+    // reconciliation below, which reasons about the app's OWN package.
+    if (skLinkedPackage(app) != null) {
+      final linkedVersion = skLinkedInstalledVersion(app, linkedInfo);
+      // Linked package not installed (yet): leave the last known base version
+      // in place — the entry then behaves like a plain track-only app.
+      if (linkedVersion == null) return null;
+      return app.installedVersion == linkedVersion
+          ? null
+          : app.copyWith(installedVersion: linkedVersion);
+    }
     var modded = false;
     final trackOnly = app.settings.getBool('trackOnly');
     final versionDetectionIsStandard = app.settings.getBool('versionDetection');
@@ -227,6 +244,9 @@ extension AppsProviderLifecycle on AppsProvider {
         for (var i in installedAppsData)
           if (i.packageName != null) i.packageName!: i,
       };
+      // Fork: hand the same enumeration to the installed-app picker, so it
+      // needs no package-manager call of its own.
+      skSetInstalledPackages(installedAppsData);
       final List<String> removedAppIds = [];
       await Future.wait(
         (await getAppsDir()) // Parse Apps from JSON
@@ -278,10 +298,18 @@ extension AppsProviderLifecycle on AppsProvider {
                   final sourceType = src.sourceIdentifier;
                   // If the app is installed, grab its OS data and reconcile install statuses
                   final PackageInfo? installedInfo = installedAppsMap[app.id];
+                  // Fork: OS data of the package this app compares against
+                  final linkedPackage = skLinkedPackage(app);
+                  final PackageInfo? linkedInfo = linkedPackage == null
+                      ? null
+                      : installedAppsMap[linkedPackage];
+                  final String? linkedLabel = await linkedInfo?.applicationInfo
+                      ?.getAppLabel();
                   // Reconcile differences between the installed and recorded install info
                   final moddedApp = getCorrectedInstallStatusAppIfPossible(
                     app,
                     installedInfo,
+                    linkedInfo: linkedInfo,
                   );
                   if (moddedApp != null) {
                     app = moddedApp;
@@ -297,6 +325,8 @@ extension AppsProviderLifecycle on AppsProvider {
                       app: app!,
                       installedInfo: installedInfo,
                       sourceType: sourceType,
+                      linkedInfo: linkedInfo,
+                      linkedLabel: linkedLabel,
                     ),
                     ifAbsent: () => AppInMemory(
                       app!,
@@ -304,6 +334,8 @@ extension AppsProviderLifecycle on AppsProvider {
                       installedInfo,
                       null,
                       sourceType: sourceType,
+                      linkedInfo: linkedInfo,
+                      linkedLabel: linkedLabel,
                     ),
                   );
                 } catch (e) {
@@ -366,7 +398,9 @@ extension AppsProviderLifecycle on AppsProvider {
       final alreadyCached = cachedIcon.existsSync() && !ignoreCache;
       final icon = alreadyCached
           ? (await cachedIcon.readAsBytes())
-          : (await apps[appId]?.installedInfo?.applicationInfo?.getAppIcon());
+          : (await apps[appId]?.installedInfo?.applicationInfo?.getAppIcon()) ??
+                // Fork: linked apps show the icon of their local build.
+                (await apps[appId]?.linkedInfo?.applicationInfo?.getAppIcon());
       if (icon != null && !alreadyCached) {
         unawaited(cachedIcon.writeAsBytes(icon));
       }
@@ -406,16 +440,46 @@ extension AppsProviderLifecycle on AppsProvider {
         final PackageInfo? info = canReuse
             ? this.apps[app.id]!.installedInfo
             : await getInstalledInfo(app.id);
-        final Uint8List? icon = canReuse
-            ? this.apps[app.id]!.icon
-            : await info?.applicationInfo?.getAppIcon();
         if (!canReuse) {
           app = app.copyWith(
             name: await (info?.applicationInfo?.getAppLabel()) ?? app.name,
           );
         }
+        // Fork: version source for a linked app. Reused across bulk update
+        // checks like the app's own info, but only while the link is unchanged.
+        final String? linkedPackage = skLinkedPackage(app);
+        final PackageInfo? linkedInfo = linkedPackage == null
+            ? null
+            : (canReuse &&
+                      this.apps[app.id]!.linkedInfo?.packageName ==
+                          linkedPackage
+                  ? this.apps[app.id]!.linkedInfo
+                  : await getInstalledInfo(linkedPackage));
+        // Fork: a linked app shows the local build's icon and label, since
+        // the tracked upstream package itself is not installed here.
+        final String? linkedLabel = canReuse && linkedInfo != null
+            ? this.apps[app.id]!.linkedLabel
+            : await linkedInfo?.applicationInfo?.getAppLabel();
+        final Uint8List? icon = canReuse
+            ? this.apps[app.id]!.icon
+            : (await info?.applicationInfo?.getAppIcon()) ??
+                  (await linkedInfo?.applicationInfo?.getAppIcon());
+        if (!canReuse && info == null && linkedInfo != null && icon != null) {
+          // The icon cache is keyed by app ID, so refresh it whenever a linked
+          // package supplies the icon — otherwise a re-link would keep showing
+          // the previous build's icon after a restart.
+          unawaited(
+            File('${iconsCacheDir.path}/${app.id}.png').writeAsBytes(icon),
+          );
+        }
         if (attemptToCorrectInstallStatus) {
-          app = getCorrectedInstallStatusAppIfPossible(app, info) ?? app;
+          app =
+              getCorrectedInstallStatusAppIfPossible(
+                app,
+                info,
+                linkedInfo: linkedInfo,
+              ) ??
+              app;
         }
         if (!onlyIfExists || this.apps.containsKey(app.id)) {
           final String filePath = '${(await getAppsDir()).path}/${app.id}.json';
@@ -429,11 +493,21 @@ extension AppsProviderLifecycle on AppsProvider {
             app: app,
             installedInfo: info,
             icon: icon,
+            linkedInfo: linkedInfo,
+            linkedLabel: linkedLabel,
           );
         } else if (!onlyIfExists) {
-          this.apps[app.id] = AppInMemory(app, null, info, icon);
+          this.apps[app.id] = AppInMemory(
+            app,
+            null,
+            info,
+            icon,
+            linkedInfo: linkedInfo,
+            linkedLabel: linkedLabel,
+          );
         }
-        if (info == null) {
+        // Keep the cached icon while a linked package supplies it.
+        if (info == null && linkedInfo == null) {
           final cachedIcon = File('${iconsCacheDir.path}/${app.id}.png');
           if (cachedIcon.existsSync()) cachedIcon.deleteSync();
         }
