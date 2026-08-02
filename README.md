@@ -14,7 +14,7 @@ fonts, borders, sizes — all live-previewed), **category Export/Import** of the
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+022`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+028`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -27,14 +27,27 @@ package with the fork's `+N` build counter stripped, so upstream `1.6.10` and yo
 `1.6.10+015` are recognised as the same release — and an update is reported only when upstream is
 **genuinely higher**, never merely different. Rebuild your fork, install it, and the entry clears
 itself; the endless "mark updated" tapping is gone. Pick the local build from a searchable dialog of
-installed apps (icon, label, package, version, and a ✨ mark on the one that already matches), and
-the entry then wears **that build's icon** and reads `Obtainium ⇒ 白い熊 獲得`.
+installed apps (icon, label, package, version, and a ✨ mark on the one that already matches). The
+entry then wears **that build's icon and label** — even when the tracked upstream is installed on
+the same phone — reads **`白い熊 獲得 ⇒ Obtainium`**, ours first, and names your build in full,
+`+NNN` counter included, so you can see at a glance which one is on the device.
 
 ## 🌱 Follow git commits, not just releases
 For a GitHub project whose releases stand still for months while its branch moves daily, follow
-**commits** instead: the head is reported as `<commit date>.g<8-char sha>` — exactly the shape our
-git-versioned forks carry — and "up to date" means *your build is rebased onto that commit*. No
-version arithmetic, no false updates when a tag is re-cut; the sha decides.
+**commits** instead: the head is reported as `<upstream version>.<commit date>.g<8-char sha>` —
+exactly the shape our git-versioned forks carry, right down to the version it sits on — and "up to
+date" means *your build is rebased onto that commit*. No version arithmetic, no false updates when
+a tag is re-cut; the sha decides. A fork rebased onto **several** upstreams pins one sha per
+upstream, and **every** sha in the version is read, so each upstream gets its own entry and each
+matches its own pin. Pick a branch to follow, and the release-only options grey themselves out
+while commits are followed rather than quietly undoing the setting.
+
+## 🔄 Refresh one source, not all of them
+Every app page carries a **Refresh from upstream** pill next to its primary button, so a single
+source can be re-checked without a full sweep of everything you track — and the page answers a
+**pull-down** too, with the same running yellow line the main window shows while it refreshes. Our
+own builds sort to the **top of every block** in the list — updates available, installed, and not
+installed alike — each still alphabetical within.
 
 ## ⚡ Update several apps at once
 Stock disables **every** app's download button the moment one download starts. Here each button
