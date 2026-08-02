@@ -332,6 +332,16 @@ class _AppPageState extends State<AppPage> {
           if (current != null) {
             e.value = current;
           }
+          // Fork: the Title field opens holding the title the entry currently
+          // shows, so renaming one is an edit rather than a retype. Leaving it
+          // as found stores nothing (see handleAdditionalOptionChanges), which
+          // is what keeps an unrenamed entry following its source and its
+          // linked build.
+          if (e.key == 'appName' &&
+              app != null &&
+              (e.value as String?)?.trim().isEmpty != false) {
+            e.value = app.autoName;
+          }
           if (e.key != skLinkedPackageKey || e is! GeneratedFormTextField) {
             return e;
           }
@@ -445,6 +455,15 @@ class _AppPageState extends State<AppPage> {
     if (app != null && values != null) {
       final s = source;
       final Map<String, dynamic> originalSettings = app.app.additionalSettings;
+      // Fork: the Title field was prefilled with the automatic title, so
+      // handing it back unchanged must not freeze that text as an override —
+      // it would then stop following a renamed linked build or a renamed
+      // upstream. Only a title the user actually altered is stored.
+      final String prefilledTitle = app.autoName;
+      final String? typedTitle = (values['appName'] as String?)?.trim();
+      if (typedTitle != null && typedTitle == prefilledTitle) {
+        values = Map<String, dynamic>.from(values)..['appName'] = '';
+      }
       final savedValues = Map<String, dynamic>.from(values);
       app.app = app.app.copyWith(additionalSettings: savedValues);
       if (s?.enforceTrackOnlyFor(app.app.additionalSettings) == true) {
@@ -650,8 +669,20 @@ class _AppPageState extends State<AppPage> {
         (installed == null || skIsOutdated(app.app)) &&
         !appsProvider.isAppObtaining(app.app.id);
     final trackOnly = app?.app.settings.getBool('trackOnly') == true;
+    // Fork: nothing here can install a linked entry — its APK is our own build
+    // of that source — so its button points at the rebase-and-build it needs
+    // instead of offering a "mark updated" the next save would undo.
+    final linkedPackage = app?.app != null ? skLinkedPackage(app!.app) : null;
     return FilledButton.icon(
-      onPressed: hasAction ? () => _handleInstallOrUpdate(context, app) : null,
+      onPressed: hasAction
+          ? (linkedPackage != null
+                ? () => showSkRebuildToUpdateDialog(
+                    context,
+                    linkedPackage: linkedPackage,
+                    latestVersion: skDisplayVersion(app.app.latestVersion),
+                  )
+                : () => _handleInstallOrUpdate(context, app))
+          : null,
       icon: Icon(
         installed == null
             ? Icons.download_outlined
@@ -661,7 +692,11 @@ class _AppPageState extends State<AppPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            installed == null
+            // Short form: the full phrase is the dialog's own title, and this
+            // button shares its row with the refresh pill.
+            linkedPackage != null
+                ? tr('rebuildToUpdateShort')
+                : installed == null
                 ? (!trackOnly ? tr('install') : tr('markInstalled'))
                 : !trackOnly
                 ? tr('update')

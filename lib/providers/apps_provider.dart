@@ -153,12 +153,18 @@ class AppInMemory {
     download: download,
   );
 
-  /// Fork: a linked app is shown as `<local build> ⇒ <source app>`, e.g.
-  /// "白い熊 獲得 ⇒ Obtainium" — ours first, since the entry is about our
-  /// build, and the arrow points at the upstream it is measured against.
-  String get name => linkedLabel != null && linkedLabel!.isNotEmpty
+  /// Fork: the title an entry composes for itself. A linked app reads
+  /// `<local build> ⇒ <source app>`, e.g. "白い熊 獲得 ⇒ Obtainium" — ours
+  /// first, since the entry is about our build, and the arrow points at the
+  /// upstream it is measured against.
+  String get autoName => linkedLabel != null && linkedLabel!.isNotEmpty
       ? '$linkedLabel $skLinkArrow ${app.finalName}'
       : app.finalName;
+
+  /// Fork: a title set by hand (the Title setting) is the WHOLE title, never
+  /// one half of a composed one — two entries tracking sibling repos of the
+  /// same project are told apart by exactly this.
+  String get name => app.overrideName ?? autoName;
   String get author => app.overrideAuthor ?? app.finalAuthor;
 
   /// Fork: one of our own builds, by the label it shows under.
