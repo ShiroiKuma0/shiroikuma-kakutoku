@@ -116,6 +116,40 @@ void showError(dynamic e, BuildContext context) {
   showMessage(e, context, isError: true);
 }
 
+/// Fork: an entry compared against a local build cannot be updated from here —
+/// its APK comes from our own build of that source. Says what to do instead,
+/// naming both the fork to rebase and the upstream version to rebase onto.
+void showSkRebuildToUpdateDialog(
+  BuildContext context, {
+  required String linkedPackage,
+  required String latestVersion,
+}) {
+  final settingsProvider = context.read<SettingsProvider>();
+  settingsProvider.selectionClick();
+  unawaited(
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: Text(tr('rebuildToUpdate')),
+        content: Text(
+          tr(
+            'rebuildToUpdateExplanation',
+            args: [linkedPackage, latestVersion],
+          ),
+        ),
+        actions: [
+          FilledButton.tonal(
+            autofocus: settingsProvider.isTV,
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(tr('ok')),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class AppIcon extends StatelessWidget {
   final Uint8List? bytes;
   final double size;
