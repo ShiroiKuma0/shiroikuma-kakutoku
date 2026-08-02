@@ -573,11 +573,17 @@ class _GeneratedFormState extends State<GeneratedForm> {
         final item = widget.items[r][e];
         final String fieldKey = item.key;
         if (item is GeneratedFormSwitch) {
+          // Fork: a switch that a currently-on switch declares it disables is
+          // inert while that one is on — the setting that wins says so on
+          // screen, instead of being silently undone by a later flip here.
+          final inert =
+              item.disabled ||
+              item.disabledBy.any((key) => values[key] == true);
           renderedInputs[r][e] = ToggleTile(
             label: tr(item.label),
             value: values[fieldKey] as bool,
             noPadding: widget.noTilePadding,
-            onChanged: item.disabled
+            onChanged: inert
                 ? null
                 : hapticSwitchOnChanged(context, (value) {
                     setState(() {

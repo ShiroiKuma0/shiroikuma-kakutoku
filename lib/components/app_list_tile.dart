@@ -865,6 +865,17 @@ class AppListBuilder {
     bool buryNonInstalled,
     Set<String> existingUpdates,
   ) {
+    // Fork: our own builds lead, and they lead in every block below — the
+    // splits that follow all preserve the order they are handed, so seeding
+    // that order here puts ours at the top of the updates, of the installed
+    // and of the not-installed run alike, each still alphabetical within.
+    final ours = <AppInMemory>[];
+    final theirs = <AppInMemory>[];
+    for (final a in apps) {
+      (a.isOurs ? ours : theirs).add(a);
+    }
+    apps = [...ours, ...theirs];
+
     if (pinUpdates) {
       final temp = <AppInMemory>[];
       apps = apps.where((sa) {
@@ -1008,12 +1019,24 @@ class _VersionLabel extends StatelessWidget {
   }
 
   String installedVersionText(App app) {
-    final installed = skDisplayVersionOrNull(app.installedVersion);
+    final installed = skDisplayVersionOrNull(_installedVersionForDisplay(app));
     final latest = skDisplayVersion(app.latestVersion);
     if (isVersionUpdate(app)) {
       return '$installed → $latest';
     }
     return installed ?? tr('notInstalled');
+  }
+
+  /// Fork: a linked entry stores its installed version with our build counter
+  /// stripped, since that is the form the source's version can be compared
+  /// against — but the list names the local build in full ("1.6.10+023"), so
+  /// which build is on the phone is readable without opening the app page.
+  String? _installedVersionForDisplay(App app) {
+    if (app.installedVersion == null || skLinkedPackage(app) == null) {
+      return app.installedVersion;
+    }
+    final raw = appInMemory.linkedInfo?.versionName?.trim();
+    return raw == null || raw.isEmpty ? app.installedVersion : raw;
   }
 
   String changesLabel(App app, bool hasChangeLogFn) {

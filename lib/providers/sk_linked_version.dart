@@ -17,9 +17,15 @@
 import 'package:android_package_manager/android_package_manager.dart';
 import 'package:obtainium/providers/source_provider.dart';
 
-/// Arrow shown between a tracked source app and the local build it is
-/// compared against: "Obtainium ⇒ 白い熊 獲得".
+/// Arrow shown between the local build an entry is about and the upstream it
+/// is measured against: "白い熊 獲得 ⇒ Obtainium".
 const String skLinkArrow = '⇒';
+
+/// The prefix every one of our own builds carries in its label. An entry whose
+/// displayed name starts with it is ours — whether the name comes from the
+/// linked local build ("白い熊 自由動画 ⇒ FreeTube") or from the installed app
+/// itself ("白い熊 獲得").
+const String skOurNamePrefix = '白い熊';
 
 /// Additional-setting keys (declared in `AppSource._commonAppSettingFormItems`).
 const String skLinkedPackageKey = 'linkedInstalledPackage';
@@ -51,6 +57,20 @@ String? skStripVersion(String? versionName, App app) {
     return raw;
   }
 }
+
+/// The installed package an entry takes its icon and label from: the linked
+/// local build whenever one is set and present, even if the tracked package
+/// itself is installed here too. Linking declares that the entry is really
+/// about that build — the version comparison already follows it, so the face
+/// the entry shows must follow it as well, or a tracked upstream that happens
+/// to be installed alongside our fork keeps lending the entry its icon.
+PackageInfo? skIconSource(
+  App? app,
+  PackageInfo? installedInfo,
+  PackageInfo? linkedInfo,
+) => (app != null && skLinkedPackage(app) != null && linkedInfo != null)
+    ? linkedInfo
+    : installedInfo;
 
 /// The version a linked app should report as installed. Null when no link is
 /// set, or when the linked package is not installed on this device (in which
@@ -167,29 +187,50 @@ String skWrappableVersion(String version) =>
 String? skDisplayVersionOrNull(String? version) =>
     version == null ? null : skDisplayVersion(version);
 
-/// The upstream commit embedded in a version string, in `git describe`'s
+/// The upstream commits embedded in a version string, in `git describe`'s
 /// `g<sha>` form — the shape the git-versioning skill pins our forks to, and
 /// the shape GitHub's commit-tracking mode reports upstream's head as.
 ///
-/// Both forms of the skill are accepted, since forks migrate one at a time:
+/// All forms of the skill are accepted, since forks migrate one at a time:
 ///   sortable  "6.3.0-alpha.2026-07-30.g5c0ed6a3+002" -> "5c0ed6a3"
 ///   original  "6.3.0-alpha.g6441c21e+24"             -> "6441c21e"
 ///   upstream  "2026-07-30.g5c0ed6a3"                 -> "5c0ed6a3"
+///
+/// A fork that rebases onto more than one upstream pins one sha per upstream
+/// ("0.25.1.2026-07-30.gfea7a050.gab12cd34+039"), and each is tracked by its
+/// own entry here, so every sha in the string is returned. Adjacent tails
+/// share the `.` between them, which is why the separators are matched as
+/// lookarounds rather than consumed — consuming one would hide the next.
 ///
 /// Requiring the `g` marker keeps an all-digit version component (a date-based
 /// version like "20260801", which is valid hex) from being read as a commit —
 /// and with the sortable form putting a date directly before the sha, that
 /// marker is what separates the two numbers.
 final RegExp _commitInVersion = RegExp(
-  r'(?:^|[.\-_+])g([0-9a-f]{7,40})(?:$|[.\-_+])',
+  r'(?:^|(?<=[.\-_+]))g([0-9a-f]{7,40})(?=$|[.\-_+])',
 );
 
-String? skExtractCommit(String version) =>
-    _commitInVersion.firstMatch(version.trim().toLowerCase())?.group(1);
+List<String> skExtractCommits(String version) => _commitInVersion
+    .allMatches(version.trim().toLowerCase())
+    .map((m) => m.group(1)!)
+    .toList();
+
+/// The first commit named by a version string, or null when it names none.
+String? skExtractCommit(String version) {
+  final commits = skExtractCommits(version);
+  return commits.isEmpty ? null : commits.first;
+}
 
 /// Whether two commit hashes denote the same commit. Lengths can differ (8
 /// characters here, more elsewhere), so the shorter is matched as a prefix.
 bool skCommitsMatch(String a, String b) => a.startsWith(b) || b.startsWith(a);
+
+/// Whether any commit named by [a] is one named by [b]. A build rebased onto
+/// several upstreams is current with respect to a given upstream as soon as
+/// one of its shas is that upstream's head — the other shas belong to the
+/// other upstreams and say nothing about this one.
+bool skAnyCommitMatches(List<String> a, List<String> b) =>
+    a.any((x) => b.any((y) => skCommitsMatch(x, y)));
 
 /// Drop-in replacement for `app.installedVersion != app.latestVersion`, adding
 /// the per-app "only if newer" rule for linked apps. Keeps the original null
@@ -204,11 +245,12 @@ bool skIsOutdated(App app) {
   }
   // Commits have no ordering, only identity: when both sides name one, being
   // rebased onto upstream's head IS being up to date, whatever the version
-  // literals around it say.
-  final installedCommit = skExtractCommit(installed);
-  final latestCommit = skExtractCommit(app.latestVersion);
-  if (installedCommit != null && latestCommit != null) {
-    return !skCommitsMatch(installedCommit, latestCommit);
+  // literals around it say. A build pinned to several upstreams carries one
+  // sha each, and this entry follows one of them, so any match is current.
+  final installedCommits = skExtractCommits(installed);
+  final latestCommits = skExtractCommits(app.latestVersion);
+  if (installedCommits.isNotEmpty && latestCommits.isNotEmpty) {
+    return !skAnyCommitMatches(installedCommits, latestCommits);
   }
   if (skLinkedPackage(app) == null ||
       !app.settings.getBool(skUpdateOnlyIfNewerKey, defaultValue: true)) {
