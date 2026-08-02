@@ -505,6 +505,9 @@ class ToggleTile extends StatelessWidget {
       contentPadding: noPadding
           ? EdgeInsets.zero
           : const EdgeInsets.symmetric(horizontal: 20),
+      // Fork: a switch that cannot be flipped says so with its whole row, not
+      // just with a greyed-out thumb at the far end of it.
+      enabled: onChanged != null,
       title: Text(label),
       subtitle: subtitle,
       trailing: Row(
