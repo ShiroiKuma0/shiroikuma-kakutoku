@@ -72,18 +72,19 @@ class GitHub extends AppSource {
         'includePrereleases',
         label: tr('includePrereleases'),
         value: false,
-        excludes: const ['trackCommits'],
+        disabledBy: const ['trackCommits'],
       ),
     ],
     // Fork: same switch as AppSource.fallbackToOlderReleasesFormItem, but
-    // mutually exclusive with commit following — there are no releases to fall
-    // back to. Either side releases the other; neither is ever locked.
+    // meaningless while commits are followed — there are no releases to fall
+    // back to. Following commits turns both release options off and greys
+    // them out; turning it off hands them back.
     [
       GeneratedFormSwitch(
         'fallbackToOlderReleases',
         label: tr('fallbackToOlderReleases'),
         value: true,
-        excludes: const ['trackCommits'],
+        disabledBy: const ['trackCommits'],
       ),
     ],
     // Fork: follow the repo's commits instead of its releases — for upstreams
@@ -822,9 +823,59 @@ class GitHub extends AppSource {
     }
   }
 
+  /// Fork: a tag name as a version number — "v0.2.79" -> "0.2.79", the form
+  /// our forks carry in their own version names. Null for an empty tag.
+  String? _versionFromTag(String? tag) {
+    var t = tag?.trim() ?? '';
+    if (t.length > 1 &&
+        (t[0] == 'v' || t[0] == 'V') &&
+        t.codeUnitAt(1) >= 48 &&
+        t.codeUnitAt(1) <= 57) {
+      t = t.substring(1);
+    }
+    return t.isEmpty ? null : t;
+  }
+
+  /// Fork: the upstream version a followed commit sits on, so the reported
+  /// version reads like the fork version it is compared against
+  /// ("0.2.79.2026-08-02.gbc343f35", not a bare "2026-08-02.gbc343f35").
+  ///
+  /// Taken from the repo's latest release tag, falling back to its newest tag
+  /// for repos that tag without releasing (and for ones whose releases are all
+  /// prereleases, which `releases/latest` reports as 404). Entirely
+  /// best-effort: the prefix is a label, never the thing that decides whether
+  /// a fork is current, so any failure here — rate limit included — simply
+  /// leaves it off rather than failing an update check that already succeeded.
+  Future<String?> _fetchUpstreamVersionPrefix(
+    String apiUrl,
+    Map<String, dynamic> additionalSettings,
+  ) async {
+    try {
+      final Response res = await sourceRequest(
+        '$apiUrl/releases/latest',
+        additionalSettings,
+      );
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        return _versionFromTag(decoded?['tag_name'] as String?);
+      }
+      if (res.statusCode != 404) return null;
+      final Response tagRes = await sourceRequest(
+        '$apiUrl/tags?per_page=1',
+        additionalSettings,
+      );
+      if (tagRes.statusCode != 200) return null;
+      final decoded = jsonDecode(tagRes.body);
+      if (decoded is! List || decoded.isEmpty) return null;
+      return _versionFromTag(decoded.first?['name'] as String?);
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Fork: the newest commit on the tracked branch, as a pseudo-release whose
-  /// version mirrors the `<commit date>.g<8-char sha>` tail that our
-  /// git-versioned forks embed in their own version name — so "up to date"
+  /// version mirrors the `<upstream version>.<commit date>.g<8-char sha>` name
+  /// our git-versioned forks embed in their own version — so "up to date"
   /// means "rebased onto this commit".
   ///
   /// The date is the commit's own committer date, as the git-versioning skill
@@ -870,8 +921,15 @@ class GitHub extends AppSource {
     final String datePrefix = commitDate != null
         ? '${commitDate.toUtc().toIso8601String().substring(0, 10)}.'
         : '';
+    final String? upstreamVersion = await _fetchUpstreamVersionPrefix(
+      apiUrl,
+      additionalSettings,
+    );
+    final String versionPrefix = upstreamVersion != null
+        ? '$upstreamVersion.'
+        : '';
     return APKDetails(
-      '$datePrefix'
+      '$versionPrefix$datePrefix'
       'g${sha.substring(0, 8)}',
       [],
       getAppNames(standardUrl),
