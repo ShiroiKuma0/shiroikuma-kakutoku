@@ -780,7 +780,7 @@ abstract class AppSource {
       }
     }
 
-    return [
+    final all = [
       // Clone so callers (e.g. the add-app form pre-filling default values)
       // can't mutate the source-owned items. Sources are now cached/shared, so
       // an in-place edit here would otherwise leak across apps.
@@ -788,6 +788,18 @@ abstract class AppSource {
       ...agnosticItems,
       ...moreConditionalItems,
     ];
+
+    // Fork: the title an entry is listed under is the field most often edited
+    // here — two entries tracking sibling repos of one project are told apart
+    // by nothing else — so it leads the page instead of sitting below a source's
+    // own switches.
+    final titleIdx = all.indexWhere(
+      (row) => row.any((item) => item.key == 'appName'),
+    );
+    if (titleIdx > 0) {
+      all.insert(0, all.removeAt(titleIdx));
+    }
+    return all;
   }
 
   bool get hasAppSpecificSettings =>
