@@ -256,10 +256,11 @@ class AppsPageState extends State<AppsPage> {
     List<String> newInstallIdsAllOrSelected,
     List<String> trackOnlyUpdateIdsAllOrSelected,
   ) {
-    return appsProvider.areDownloadsRunning() ||
-            (existingUpdateIdsAllOrSelected.isEmpty &&
-                newInstallIdsAllOrSelected.isEmpty &&
-                trackOnlyUpdateIdsAllOrSelected.isEmpty)
+    // Fork: no longer gated on downloads running — apps already in the
+    // pipeline are skipped by the provider, the rest simply queue up.
+    return existingUpdateIdsAllOrSelected.isEmpty &&
+            newInstallIdsAllOrSelected.isEmpty &&
+            trackOnlyUpdateIdsAllOrSelected.isEmpty
         ? null
         : () {
             settingsProvider.heavyImpact();
@@ -665,7 +666,7 @@ class AppsPageState extends State<AppsPage> {
                     pinSelectedApps(selectedApps);
                   },
                 ),
-                if (hasObtainActions && !appsProvider.areDownloadsRunning())
+                if (hasObtainActions)
                   optionTile(
                     icon: Icons.download_rounded,
                     label: tr('installUpdateSelectedApps'),
