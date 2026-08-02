@@ -119,10 +119,16 @@ class GeneratedFormSwitch extends GeneratedFormItem {
   bool disabled;
 
   /// Fork: keys of other switches this one turns off when it is switched on.
-  /// Nothing is ever locked — each side of an exclusive pair simply releases
-  /// the other, so whichever the user touches last wins. Used for settings
-  /// that cannot both apply (GitHub's release options vs. following commits).
+  /// Used for settings that cannot both apply (GitHub's release options vs.
+  /// following commits). Pair it with [disabledBy] on the other side, so that
+  /// the switches this one displaces cannot silently displace it back.
   final List<String> excludes;
+
+  /// Fork: keys of switches that make this one inert while they are on. The
+  /// counterpart to [excludes]: the setting that wins greys out the ones it
+  /// makes irrelevant, instead of leaving them live to be flipped — which
+  /// would quietly undo it, with nothing on screen to say so.
+  final List<String> disabledBy;
 
   GeneratedFormSwitch(
     super.key, {
@@ -131,6 +137,7 @@ class GeneratedFormSwitch extends GeneratedFormItem {
     bool super.value = false,
     this.disabled = false,
     this.excludes = const [],
+    this.disabledBy = const [],
     List<String? Function(bool value)> super.additionalValidators = const [],
   });
 
@@ -150,6 +157,7 @@ class GeneratedFormSwitch extends GeneratedFormItem {
       value: value,
       disabled: disabled,
       excludes: List.from(excludes),
+      disabledBy: List.from(disabledBy),
       additionalValidators: List.from(additionalValidators),
     );
   }
