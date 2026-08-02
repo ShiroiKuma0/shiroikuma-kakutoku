@@ -10,6 +10,7 @@ import 'package:obtainium/components/category_editor.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/components/app_detail_widgets.dart';
+import 'package:obtainium/components/sk_eximport.dart';
 import 'package:obtainium/components/sk_installed_app_picker.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
@@ -1295,17 +1296,38 @@ class _AppPageState extends State<AppPage> {
           padding: const EdgeInsets.only(top: 4),
           child: Row(
             children: [
-              ..._getSecondaryActions(
-                context,
-                app,
-                source,
-                appsProvider,
-                settingsProvider,
-                showAppWebpageFinal,
-                isVersionDetectionStandard,
-                trackOnly,
+              // Fork: the icon actions give way first — the refresh pill and
+              // the primary button keep their full width on a narrow screen.
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _getSecondaryActions(
+                      context,
+                      app,
+                      source,
+                      appsProvider,
+                      settingsProvider,
+                      showAppWebpageFinal,
+                      isVersionDetectionStandard,
+                      trackOnly,
+                    ),
+                  ),
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
+              // Fork: re-check this one app's source on demand, without going
+              // back to the list and refreshing every app.
+              SkPillButton(
+                tr('refreshFromUpstream'),
+                onPressed: app == null || updating || progress != null
+                    ? null
+                    : () {
+                        settingsProvider.selectionClick();
+                        unawaited(getUpdate(context));
+                      },
+              ),
+              const SizedBox(width: 8),
               _getPrimaryButton(context, app, appsProvider),
             ],
           ),
@@ -1386,65 +1408,97 @@ class _AppPageState extends State<AppPage> {
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: showAppWebpageFinal
           ? _getAppWebView(context, app)
-          : Column(
+          : Stack(
               children: [
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () async {
-                      if (app != null) {
-                        await getUpdate(context);
-                      }
-                    },
-                    child: CustomScrollView(
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: SizedBox(
-                            height: MediaQuery.of(context).padding.top + 8,
+                Column(
+                  children: [
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: () async {
+                          if (app != null) {
+                            await getUpdate(context);
+                          }
+                        },
+                        child: CustomScrollView(
+                          // Fork: the page is short enough to fit on
+                          // screen, and a scroll view that cannot
+                          // overscroll never hands the pull to the
+                          // RefreshIndicator — this is what makes
+                          // pull-down refresh work here at all.
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: SizedBox(
+                                height: MediaQuery.of(context).padding.top + 8,
+                              ),
+                            ),
+                            _buildHeaderSection(app),
+                            ..._buildRepoRenameSection(app, appsProvider),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 20),
+                            ),
+                            ..._buildVersionInfoSections(app),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 20),
+                            ),
+                            ..._buildSourceInfoSections(
+                              app,
+                              appsProvider,
+                              settingsProvider,
+                              certs,
+                              hasAssets,
+                            ),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 20),
+                            ),
+                            _buildCategorySection(app, appsProvider),
+                            ..._buildAboutSection(app),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 32),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHigh,
+                        border: Border(
+                          top: BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant,
                           ),
                         ),
-                        _buildHeaderSection(app),
-                        ..._buildRepoRenameSection(app, appsProvider),
-                        const SliverToBoxAdapter(child: SizedBox(height: 20)),
-                        ..._buildVersionInfoSections(app),
-                        const SliverToBoxAdapter(child: SizedBox(height: 20)),
-                        ..._buildSourceInfoSections(
+                      ),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      child: SafeArea(
+                        top: false,
+                        child: _buildActionsContent(
                           app,
                           appsProvider,
                           settingsProvider,
-                          certs,
-                          hasAssets,
+                          source,
+                          showAppWebpageFinal,
+                          isVersionDetectionStandard,
+                          trackOnly,
                         ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 20)),
-                        _buildCategorySection(app, appsProvider),
-                        ..._buildAboutSection(app),
-                        const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                    border: Border(
-                      top: BorderSide(
-                        color: Theme.of(context).colorScheme.outlineVariant,
                       ),
                     ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  child: SafeArea(
-                    top: false,
-                    child: _buildActionsContent(
-                      app,
-                      appsProvider,
-                      settingsProvider,
-                      source,
-                      showAppWebpageFinal,
-                      isVersionDetectionStandard,
-                      trackOnly,
+                  ],
+                ),
+                // Fork: the running line the main window shows while it
+                // refreshes, pinned just below the status bar so a pull-down
+                // (or the refresh pill) reports itself the same way here.
+                if (updating)
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top + 2,
+                    left: 32,
+                    right: 32,
+                    child: const IgnorePointer(
+                      child: LinearProgressIndicator(),
                     ),
                   ),
-                ),
               ],
             ),
     );

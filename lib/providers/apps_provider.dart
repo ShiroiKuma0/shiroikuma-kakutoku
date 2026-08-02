@@ -158,13 +158,16 @@ class AppInMemory {
     download: download,
   );
 
-  /// Fork: a linked app is shown as `<source app> ⇒ <local build>`, e.g.
-  /// "Obtainium ⇒ 白い熊 獲得" — the entry tracks the former and compares
-  /// against the latter.
+  /// Fork: a linked app is shown as `<local build> ⇒ <source app>`, e.g.
+  /// "白い熊 獲得 ⇒ Obtainium" — ours first, since the entry is about our
+  /// build, and the arrow points at the upstream it is measured against.
   String get name => linkedLabel != null && linkedLabel!.isNotEmpty
-      ? '${app.finalName} $skLinkArrow $linkedLabel'
+      ? '$linkedLabel $skLinkArrow ${app.finalName}'
       : app.finalName;
   String get author => app.overrideAuthor ?? app.finalAuthor;
+
+  /// Fork: one of our own builds, by the label it shows under.
+  bool get isOurs => name.trimLeft().startsWith(skOurNamePrefix);
 
   /// Fork: the package the icon represents and opens on tap — the app's own
   /// when installed, otherwise the linked local build.
