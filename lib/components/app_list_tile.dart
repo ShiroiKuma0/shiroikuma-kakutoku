@@ -225,10 +225,19 @@ class AppListTile extends StatelessWidget {
 
   Widget _updateButton(BuildContext context) {
     final trackOnly = _app.settings.getBool('trackOnly');
+    final linkedPackage = skLinkedPackage(_app);
     final cs = Theme.of(context).colorScheme;
     // Fork: only this app's own in-flight download disables its button —
     // other apps' downloads are free to run alongside it.
-    final onPressed = appsProvider.isAppObtaining(_app.id)
+    // Fork: a linked entry's update is not ours to install — the APK comes
+    // from our own build of that source, so the button says so instead.
+    final onPressed = linkedPackage != null
+        ? () => showSkRebuildToUpdateDialog(
+            context,
+            linkedPackage: linkedPackage,
+            latestVersion: skDisplayVersion(_app.latestVersion),
+          )
+        : appsProvider.isAppObtaining(_app.id)
         ? null
         : () {
             settingsProvider.heavyImpact();
@@ -256,7 +265,11 @@ class AppListTile extends StatelessWidget {
     // border — the house action-button look.
     return IconButton.filled(
       onPressed: onPressed,
-      tooltip: trackOnly ? tr('markUpdated') : tr('update'),
+      tooltip: linkedPackage != null
+          ? tr('rebuildToUpdate')
+          : trackOnly
+          ? tr('markUpdated')
+          : tr('update'),
       style: IconButton.styleFrom(
         backgroundColor: cs.surface,
         foregroundColor: cs.primary,
@@ -267,7 +280,13 @@ class AppListTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
         ),
       ),
-      icon: Icon(trackOnly ? Icons.check_rounded : Icons.download_rounded),
+      // Fork: a linked entry wears the same download arrow as any other app
+      // with an update — it is the same news, whoever ends up building it.
+      icon: Icon(
+        trackOnly && linkedPackage == null
+            ? Icons.check_rounded
+            : Icons.download_rounded,
+      ),
     );
   }
 
@@ -314,18 +333,12 @@ class AppListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final showChangesFn = getChangeLogFn(context, _app);
     final hasUpdate = isAppUpdateable(_app, settingsProvider);
-    // Fork: a linked app's installed version is owned by the linked package,
-    // so "mark updated" would be undone by the next save — hide the button.
-    final canMarkUpdated = skLinkedPackage(_app) == null;
     final Widget trailingRow = LayoutBuilder(
       builder: (context, constraints) => Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (hasUpdate && canMarkUpdated) ...[
-            _updateButton(context),
-            const SizedBox(width: 8),
-          ],
+          if (hasUpdate) ...[_updateButton(context), const SizedBox(width: 8)],
           _VersionLabel(
             appInMemory: appInMemory,
             settingsProvider: settingsProvider,
