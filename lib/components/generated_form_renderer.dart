@@ -665,6 +665,9 @@ class GeneratedFormModal extends StatefulWidget {
     this.additionalWidgets = const [],
     this.singleNullReturnButton,
     this.primaryActionColour,
+    this.primaryActionTextColour,
+    this.primaryActionText,
+    this.primaryActionFirst = false,
     this.tileMode = false,
   });
 
@@ -675,6 +678,17 @@ class GeneratedFormModal extends StatefulWidget {
   final List<Widget> additionalWidgets;
   final String? singleNullReturnButton;
   final Color? primaryActionColour;
+
+  /// Fork: label colour of the primary action, when [primaryActionColour] is
+  /// set. Defaults to the theme's onError.
+  final Color? primaryActionTextColour;
+
+  /// Fork: primary action label. Defaults to "continue".
+  final String? primaryActionText;
+
+  /// Fork: puts the primary action to the left of the cancel button, for
+  /// destructive dialogs where it should be the harder one to hit by reflex.
+  final bool primaryActionFirst;
   final bool tileMode;
 
   @override
@@ -695,6 +709,11 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
   Widget build(BuildContext context) {
     return AlertDialog(
       scrollable: true,
+      // Fork: a primary-first (destructive) dialog splits its buttons to the
+      // two edges, so the destructive one is nowhere near the reflex tap.
+      actionsAlignment: widget.primaryActionFirst
+          ? MainAxisAlignment.spaceBetween
+          : null,
       title: Text(widget.title),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -720,9 +739,22 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
           if (widget.additionalWidgets.isNotEmpty) ...widget.additionalWidgets,
         ],
       ),
-      actions: [
-        TextButton(
+      actions: () {
+        // Fork: the border filled buttons carry in this theme (accent colour,
+        // knob-driven width), reused so both dialog buttons are outlined alike.
+        final themeSide = Theme.of(
+          context,
+        ).filledButtonTheme.style?.side?.resolve(const <WidgetState>{});
+        final cancelSide =
+            themeSide ??
+            BorderSide(color: Theme.of(context).colorScheme.outline, width: 1.5);
+        final cancelButton = TextButton(
           autofocus: context.read<SettingsProvider>().isTV,
+          // Only the primary-first (destructive) layout outlines its cancel
+          // button — there the primary is red, so cancel carries the accent.
+          style: widget.primaryActionFirst
+              ? TextButton.styleFrom(side: cancelSide)
+              : null,
           onPressed: () {
             Navigator.of(context).pop(null);
           },
@@ -731,14 +763,21 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
                 ? tr('cancel')
                 : widget.singleNullReturnButton!,
           ),
-        ),
-        widget.singleNullReturnButton == null
+        );
+        final primaryButton = widget.singleNullReturnButton == null
             ? FilledButton(
                 style: widget.primaryActionColour == null
                     ? null
                     : FilledButton.styleFrom(
                         backgroundColor: widget.primaryActionColour,
-                        foregroundColor: Theme.of(context).colorScheme.onError,
+                        foregroundColor:
+                            widget.primaryActionTextColour ??
+                            Theme.of(context).colorScheme.onError,
+                        // Border in the button's own colour, not the accent.
+                        side: BorderSide(
+                          color: widget.primaryActionColour!,
+                          width: themeSide?.width ?? 1.5,
+                        ),
                       ),
                 onPressed: !valid
                     ? null
@@ -746,10 +785,13 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
                         context.read<SettingsProvider>().selectionClick();
                         Navigator.of(context).pop(values);
                       },
-                child: Text(tr('continue')),
+                child: Text(widget.primaryActionText ?? tr('continue')),
               )
-            : const SizedBox.shrink(),
-      ],
+            : const SizedBox.shrink();
+        return widget.primaryActionFirst
+            ? [primaryButton, cancelButton]
+            : [cancelButton, primaryButton];
+      }(),
     );
   }
 }

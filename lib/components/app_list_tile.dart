@@ -233,7 +233,9 @@ class AppListTile extends StatelessWidget {
   Widget _updateButton(BuildContext context) {
     final trackOnly = _app.settings.getBool('trackOnly');
     final cs = Theme.of(context).colorScheme;
-    final onPressed = appsProvider.areDownloadsRunning()
+    // Fork: only this app's own in-flight download disables its button —
+    // other apps' downloads are free to run alongside it.
+    final onPressed = appsProvider.isAppObtaining(_app.id)
         ? null
         : () {
             settingsProvider.heavyImpact();
@@ -408,7 +410,7 @@ class AppListTile extends StatelessWidget {
               CustomSemanticsAction(
                 label: canUpdate ? tr('update') : tr('install'),
               ): () {
-                if (!appsProvider.areDownloadsRunning()) {
+                if (!appsProvider.isAppObtaining(appId)) {
                   appsProvider.downloadAndInstallLatestApps([
                     appId,
                   ], appNavigatorKey.currentContext);
@@ -522,7 +524,7 @@ class AppListTile extends StatelessWidget {
                 confirmDismiss: (direction) async {
                   if (direction == DismissDirection.startToEnd) {
                     if ((canInstall || canUpdate) &&
-                        !appsProvider.areDownloadsRunning()) {
+                        !appsProvider.isAppObtaining(appId)) {
                       settingsProvider.heavyImpact();
                       unawaited(
                         appsProvider
@@ -563,9 +565,16 @@ class DownloadProgressTrailing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final installing = progress < 0;
-    final label = installing ? tr('installing') : '${progress.toInt()}%';
-    final sizeLabel = installing
+    // Fork: queued (waiting for a download slot or for the install lock) is
+    // its own state — neither downloading nor installing yet.
+    final queued = progress == queuedProgressSentinel;
+    final installing = !queued && progress < 0;
+    final label = queued
+        ? tr('queued')
+        : installing
+        ? tr('installing')
+        : '${progress.toInt()}%';
+    final sizeLabel = queued || installing
         ? null
         : formatDownloadSize(receivedBytes, totalBytes);
     final labelStyle =
@@ -585,7 +594,11 @@ class DownloadProgressTrailing extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
-                    value: installing ? null : progress / 100,
+                    value: installing
+                        ? null
+                        : queued
+                        ? 0
+                        : progress / 100,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -608,7 +621,7 @@ class DownloadProgressTrailing extends StatelessWidget {
             ),
           ),
         ),
-        if (!installing && onCancel != null)
+        if (!installing && !queued && onCancel != null)
           DownloadCancelButton(onPressed: onCancel!),
       ],
     );
