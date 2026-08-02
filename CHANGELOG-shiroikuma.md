@@ -3,7 +3,51 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.10+019 — current
+## 1.6.10+022 — current
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490022`.
+
+### Update several apps at once (new)
+- **The per-app download button no longer goes dead when another app is downloading.** Stock gates
+  it — and swipe-to-update, and the detail page's install button — on a *global* "is any download
+  running", so the first tap disabled every other app on the screen. Each button now looks only at
+  **its own** app, so you can fire off as many as you like and watch them run together.
+- **Downloads run concurrently, installs strictly one at a time.** Installing is exclusive by
+  nature: the platform installer shows one prompt at a time, and the stock installer waits for you
+  to come back to the foreground. So downloads pass through a **semaphore (three at once)** while
+  installs pass through a **single global lock** — no overlapping install prompts, ever, and no
+  download waiting on one.
+- **Each app installs the moment its own download lands.** The obtain flow is pipelined per app
+  rather than "download everything, then install everything", and the queued install is awaited
+  separately, so an install prompt can never hold up the next download. The installer-permission
+  prompt and the foreground wait moved under the lock with the install they belong to.
+- **The same app can never be started twice** — a double tap, a swipe, or a bulk run overlapping a
+  per-app one is dropped rather than downloaded again. Bulk update is therefore no longer disabled
+  while downloads run: it queues what is new and skips what is already going.
+- **A self-update still runs last and on its own**, since committing it can end the process that
+  everything else is queued in.
+- Apps waiting for a download slot or for the install lock read **`Queued`** in the list and on the
+  detail page, with an empty progress track — distinct from both downloading and installing.
+
+### The app-removal dialog
+- The confirm button is now **`Remove`**, not `Continue` — it says what it does.
+- It sits at the **far left**, with Cancel at the far right, so the destructive action is nowhere
+  near where a reflex tap lands.
+- **Dark blood red `#8B0000`** in both fill and border, with a **white** label. Cancel takes the
+  border filled buttons carry in this theme — read off the theme itself, so it follows your accent
+  colour and border-width knobs rather than a hardcoded value.
+- **Both Remove colours are settable** in Settings (*Remove button colour*, which drives fill and
+  border together, and *Remove button text colour*), through the same picker the theme colour uses.
+  The picker no longer writes the setting when it is merely opened and dismissed.
+
+### The action banner is gone by default
+- The **Install/update apps** header row and its **Update** pill no longer appear unless you ask
+  for them: *Action banner* now defaults to **None**, and upstream's legacy
+  `showActionBannerForUpdateOnly` preference is no longer consulted, so the default holds on
+  existing installs too. The dropdown still turns it back on. Nothing is lost — the per-app buttons
+  and the selection menu's *Install/update selected apps* cover the same ground.
+
+## 1.6.10+019
 
 Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490019`.
 
