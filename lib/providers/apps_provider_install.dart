@@ -54,15 +54,15 @@ const int _bgInstallConfirmAttempts = 20; // 20 × 500ms = 10 seconds
 
 class _InstallResult {
   final String id;
-  final bool willBeSilent;
   final DownloadedApk? downloadedFile;
   final DownloadedDir? downloadedDir;
   const _InstallResult({
     required this.id,
-    required this.willBeSilent,
     this.downloadedFile,
     this.downloadedDir,
   });
+
+  bool get hasArtifact => downloadedFile != null || downloadedDir != null;
 }
 
 /// App download, install, and on-device package operations for [AppsProvider].
@@ -915,61 +915,59 @@ extension AppsProviderInstall on AppsProvider {
     appsToInstall = moveStrToEnd(appsToInstall, '$obtainiumId.fdroid');
     appsToInstall = moveStrToEnd(appsToInstall, '$obtainiumId.debug');
 
-    List<_InstallResult> downloadResults = [];
+    // Fork: claim each app for this run, skipping any already in the pipeline
+    // from an overlapping run (a second tap, or a bulk run started while a
+    // per-app one is still going) so nothing is downloaded or installed twice.
+    final List<String> claimedIds = [];
+    for (var id in appsToInstall) {
+      if (appsInObtainPipeline.add(id)) {
+        claimedIds.add(id);
+      }
+    }
+    appsToInstall = claimedIds;
+
+    final selfIds = appsToInstall.where(_isSelfUpdateId).toList();
+    final otherIds = appsToInstall
+        .where((id) => !_isSelfUpdateId(id))
+        .toList();
+
     try {
+      // Installs are queued as each download finishes and awaited afterwards,
+      // so an install prompt never holds up the next download.
+      final List<Future<void>> pendingInstalls = [];
+      Future<void> obtain(String id) => _obtainApp(
+        id,
+        // ignore: use_build_context_synchronously
+        context,
+        notificationsProvider,
+        useExisting,
+        errors,
+        installedIds,
+        pendingInstalls,
+      );
       // Background tasks (forceParallelDownloads) run serially like main,
       // otherwise the parallelDownloads setting controls concurrency.
       if (forceParallelDownloads || !settingsProvider.parallelDownloads) {
-        for (var id in appsToInstall) {
-          downloadResults.add(
-            await _downloadAppForInstall(
-              id,
-              // ignore: use_build_context_synchronously
-              context,
-              notificationsProvider,
-              useExisting,
-              errors,
-            ),
-          );
+        for (var id in otherIds) {
+          await obtain(id);
         }
       } else {
-        downloadResults = await Future.wait(
-          appsToInstall.map(
-            (id) => _downloadAppForInstall(
-              id,
-              context,
-              notificationsProvider,
-              useExisting,
-              errors,
-            ),
-          ),
-        );
+        await Future.wait(otherIds.map(obtain));
       }
-      for (var res in downloadResults) {
-        if (!errors.appIdNames.containsKey(res.id)) {
-          try {
-            await _installDownloadedApp(
-              res.id,
-              res.willBeSilent,
-              res.downloadedFile,
-              res.downloadedDir,
-              installedIds,
-              errors,
-              // ignore: use_build_context_synchronously
-              context,
-              notificationsProvider,
-            );
-          } catch (e) {
-            final id = res.id;
-            errors.add(id, e, appName: apps[id]?.name);
-          }
-        }
+      await Future.wait(pendingInstalls);
+      // A self-update goes last and on its own: committing it can end this
+      // process, which would strand anything still queued behind it.
+      for (var id in selfIds) {
+        pendingInstalls.clear();
+        await obtain(id);
+        await Future.wait(pendingInstalls);
       }
     } finally {
       // Clear any remaining progress in case the flow was interrupted
       // (e.g. unhandled error in a download, app backgrounded/killed, etc.)
       for (var id in appsToInstall) {
         apps[id]?.downloadProgress = null;
+        appsInObtainPipeline.remove(id);
       }
       notify();
     }
@@ -1237,6 +1235,135 @@ extension AppsProviderInstall on AppsProvider {
     }
   }
 
+  /// Whether [id] is this app itself (any flavor), whose install ends the
+  /// process it is running in.
+  bool _isSelfUpdateId(String id) =>
+      id == obtainiumId ||
+      id == obtainiumTempId ||
+      id == '$obtainiumId.fdroid' ||
+      id == '$obtainiumId.debug';
+
+  /// Fork: shows [id] as waiting its turn — for a download slot or for the
+  /// install lock.
+  void _setQueuedProgress(String id) {
+    final entry = apps[id];
+    if (entry == null) return;
+    entry.downloadProgress = queuedProgressSentinel;
+    notify();
+  }
+
+  /// Fork: downloads one app — bounded by the download semaphore — and hands
+  /// its install to the global install lock, appending the install's future to
+  /// [pendingInstalls] instead of awaiting it. Several apps can therefore be
+  /// downloading while at most one is installing, and no download waits on an
+  /// install prompt.
+  Future<void> _obtainApp(
+    String id,
+    BuildContext? context,
+    NotificationsProvider? notificationsProvider,
+    bool useExisting,
+    MultiAppMultiError errors,
+    List<String> installedIds,
+    List<Future<void>> pendingInstalls,
+  ) async {
+    _setQueuedProgress(id);
+    await acquireDownloadSlot();
+    _InstallResult res;
+    try {
+      res = await _downloadAppForInstall(
+        id,
+        // ignore: use_build_context_synchronously
+        context,
+        notificationsProvider,
+        useExisting,
+        errors,
+      );
+    } finally {
+      releaseDownloadSlot();
+    }
+    if (errors.appIdNames.containsKey(res.id) || !res.hasArtifact) return;
+    // The artifact may resolve to a different package ID than the app entry;
+    // claim that one too, so a concurrent run can't pick it up in parallel.
+    final bool claimedResolvedId =
+        res.id != id && appsInObtainPipeline.add(res.id);
+    // Queued synchronously, so installs run in download-completion order.
+    pendingInstalls.add(
+      withInstallLock(
+            () => _prepareAndInstall(
+              res,
+              installedIds,
+              errors,
+              // ignore: use_build_context_synchronously
+              context,
+              notificationsProvider,
+            ),
+            onQueued: () => _setQueuedProgress(res.id),
+            onAcquired: () {
+              final entry = apps[res.id];
+              if (entry?.downloadProgress == queuedProgressSentinel) {
+                entry!.downloadProgress = _downloadCompleteProgress.toDouble();
+                notify();
+              }
+            },
+          )
+          .catchError((e) {
+            errors.add(res.id, e, appName: apps[res.id]?.name);
+          })
+          .whenComplete(() {
+            if (claimedResolvedId) {
+              appsInObtainPipeline.remove(res.id);
+              apps[res.id]?.downloadProgress = null;
+              notify();
+            }
+          }),
+    );
+  }
+
+  /// Fork: the install half of [_obtainApp], run under the install lock — the
+  /// installer permission prompt and the stock installer's foreground wait are
+  /// part of installing, so they must not overlap between apps either.
+  Future<void> _prepareAndInstall(
+    _InstallResult res,
+    List<String> installedIds,
+    MultiAppMultiError errors,
+    BuildContext? context,
+    NotificationsProvider? notificationsProvider,
+  ) async {
+    final id = res.id;
+    final entry = apps[id];
+    if (entry == null) return;
+    try {
+      final willBeSilent = await canInstallSilently(entry.app);
+      final installer = getInstaller();
+      await installer.ensurePermission();
+      // Only the stock installer surfaces a system install prompt that pulls the
+      // user away; wait for them to return before proceeding.
+      if (!willBeSilent &&
+          context != null &&
+          context.mounted &&
+          installer.modeKey == 'stock') {
+        await waitForUserToReturnToForeground(context);
+      }
+      await _installDownloadedApp(
+        id,
+        willBeSilent,
+        res.downloadedFile,
+        res.downloadedDir,
+        installedIds,
+        errors,
+        // ignore: use_build_context_synchronously
+        context,
+        notificationsProvider,
+      );
+    } catch (e) {
+      errors.add(id, e, appName: apps[id]?.name);
+      if (apps[id] != null) {
+        apps[id]!.downloadProgress = null;
+        notify();
+      }
+    }
+  }
+
   Future<_InstallResult> _downloadAppForInstall(
     String id,
     BuildContext? context,
@@ -1244,7 +1371,6 @@ extension AppsProviderInstall on AppsProvider {
     bool useExisting,
     MultiAppMultiError errors,
   ) async {
-    bool willBeSilent = false;
     DownloadedApk? downloadedFile;
     DownloadedDir? downloadedDir;
     try {
@@ -1267,17 +1393,6 @@ extension AppsProviderInstall on AppsProvider {
       // doesn't report "Installing" before installation actually begins.
       apps[id]?.downloadProgress = _downloadCompleteProgress.toDouble();
       notify();
-      willBeSilent = await canInstallSilently(apps[id]!.app);
-      final installer = getInstaller();
-      await installer.ensurePermission();
-      // Only the stock installer surfaces a system install prompt that pulls the
-      // user away; wait for them to return before proceeding.
-      if (!willBeSilent &&
-          context != null &&
-          context.mounted &&
-          installer.modeKey == 'stock') {
-        await waitForUserToReturnToForeground(context);
-      }
     } catch (e) {
       // A user-cancelled download is not an error; skip it silently.
       if (e is! CancellationException) {
@@ -1292,7 +1407,6 @@ extension AppsProviderInstall on AppsProvider {
     }
     return _InstallResult(
       id: id,
-      willBeSilent: willBeSilent,
       downloadedFile: downloadedFile,
       downloadedDir: downloadedDir,
     );

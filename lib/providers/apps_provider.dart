@@ -61,8 +61,16 @@ const int _bgClientExceptionRetryWaitSeconds = 15 * 60;
 final packageManager = AndroidPackageManager();
 final packageInfoFlags = PackageInfoFlags({PMFlag.getSigningCertificates});
 
+/// Fork: how many app downloads may run at once. Further ones queue.
+const int maxConcurrentDownloads = 3;
+
+/// Fork: [AppInMemory.downloadProgress] sentinel meaning "waiting its turn" —
+/// for a download slot or for the install lock — with no percentage to show.
+const double queuedProgressSentinel = -2;
+
 /// Live download state for an app: the progress percent (listenable, with -1
-/// meaning "installing" and null meaning "idle") plus the bytes downloaded and
+/// meaning "installing", [queuedProgressSentinel] meaning "queued" and null
+/// meaning "idle") plus the bytes downloaded and
 /// total size when known. Held by reference and shared across [AppInMemory]
 /// copies so UI listeners bound to an earlier instance keep updating even after
 /// saveApps replaces the map entry with a copy.
@@ -965,6 +973,78 @@ class AppsProvider with ChangeNotifier {
       entry.downloadProgress = null;
     }
     notify();
+  }
+
+  // Fork: concurrent obtain pipeline.
+  //
+  // Several apps may be downloading at once — from separate per-app taps, a
+  // bulk run, or both overlapping. Installing, however, is exclusive: the
+  // platform installer shows one prompt at a time, and the stock installer
+  // additionally waits for the user to return to the foreground. Downloads
+  // therefore pass through a small semaphore, installs through a single lock.
+
+  /// App IDs currently somewhere in the download → install pipeline. A second
+  /// request for the same app (double tap, swipe, overlapping bulk run) is
+  /// dropped rather than downloaded twice.
+  final Set<String> appsInObtainPipeline = {};
+
+  /// Whether [appId] is already downloading, queued, or installing, and so
+  /// must not be started again. Unlike [areDownloadsRunning] this says nothing
+  /// about *other* apps — those may run concurrently.
+  bool isAppObtaining(String appId) =>
+      appsInObtainPipeline.contains(appId) ||
+      apps[appId]?.downloadProgress != null;
+
+  int _activeDownloads = 0;
+  final List<Completer<void>> _downloadSlotQueue = [];
+  Future<void> _installLock = Future<void>.value();
+  int _installQueueDepth = 0;
+
+  /// Waits for a free download slot. Every call must be paired with a
+  /// [releaseDownloadSlot] in a `finally`.
+  Future<void> acquireDownloadSlot() async {
+    if (_activeDownloads < maxConcurrentDownloads) {
+      _activeDownloads++;
+      return;
+    }
+    final waiter = Completer<void>();
+    _downloadSlotQueue.add(waiter);
+    // The releasing download hands its slot straight over, so the count stays
+    // as-is rather than being decremented and re-incremented.
+    await waiter.future;
+  }
+
+  void releaseDownloadSlot() {
+    if (_downloadSlotQueue.isNotEmpty) {
+      _downloadSlotQueue.removeAt(0).complete();
+    } else if (_activeDownloads > 0) {
+      _activeDownloads--;
+    }
+  }
+
+  /// Runs [action] holding the global install lock, so only one install — and
+  /// only one install prompt — is ever live. [onQueued] fires when the caller
+  /// actually has to wait for its turn, [onAcquired] when it gets it.
+  Future<T> withInstallLock<T>(
+    Future<T> Function() action, {
+    void Function()? onQueued,
+    void Function()? onAcquired,
+  }) async {
+    final previous = _installLock;
+    final release = Completer<void>();
+    _installLock = release.future;
+    final mustWait = _installQueueDepth > 0;
+    _installQueueDepth++;
+    if (mustWait) onQueued?.call();
+    try {
+      // Never completed with an error, so this cannot break the chain.
+      await previous;
+      if (mustWait) onAcquired?.call();
+      return await action();
+    } finally {
+      _installQueueDepth--;
+      release.complete();
+    }
   }
 
   /// Waits for any in-flight [loadApps] to finish, so concurrent callers

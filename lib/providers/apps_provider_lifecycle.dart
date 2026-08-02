@@ -556,7 +556,12 @@ extension AppsProviderLifecycle on AppsProvider {
       context: context,
       builder: (BuildContext ctx) {
         return GeneratedFormModal(
-          primaryActionColour: Theme.of(context).colorScheme.error,
+          // Fork: a red "Remove" on the left, in the user's chosen colours —
+          // named for what it does, and not where a reflex "Continue" tap goes.
+          primaryActionColour: settingsProvider.removeButtonColour,
+          primaryActionTextColour: settingsProvider.removeButtonTextColour,
+          primaryActionText: tr('remove'),
+          primaryActionFirst: true,
           title: plural('removeAppQuestion', apps.length),
           items: !showUninstallOption
               ? []

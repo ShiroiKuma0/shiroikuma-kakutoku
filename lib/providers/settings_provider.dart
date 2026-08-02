@@ -25,6 +25,11 @@ const String obtainiumId = 'shiroikuma.kakutoku';
 const String obtainiumUrl = 'https://github.com/ShiroiKuma0/shiroikuma-kakutoku';
 const Color obtainiumThemeColor = Color(0xFF6438B5);
 
+// Fork: the remove dialog's confirm button, whose colours are user-settable.
+// Dark blood red for both the fill and the border, white for the label.
+const Color removeButtonDefaultColour = Color(0xFF8B0000);
+const Color removeButtonDefaultTextColour = Color(0xFFFFFFFF);
+
 String lowerCaseUnlessLang(String str, String lang) =>
     currentLanguageCode == lang ? str : str.toLowerCase();
 
@@ -210,6 +215,28 @@ class SettingsProvider with ChangeNotifier {
 
   set themeColor(Color themeColor) {
     prefs?.setInt('themeColor', themeColor.toARGB32());
+    notifyListeners();
+  }
+
+  /// Fork: fill colour of the remove dialog's confirm button.
+  Color get removeButtonColour {
+    final int? colorCode = _getInt('removeButtonColour');
+    return colorCode != null ? Color(colorCode) : removeButtonDefaultColour;
+  }
+
+  set removeButtonColour(Color colour) {
+    prefs?.setInt('removeButtonColour', colour.toARGB32());
+    notifyListeners();
+  }
+
+  /// Fork: label colour of the remove dialog's confirm button.
+  Color get removeButtonTextColour {
+    final int? colorCode = _getInt('removeButtonTextColour');
+    return colorCode != null ? Color(colorCode) : removeButtonDefaultTextColour;
+  }
+
+  set removeButtonTextColour(Color colour) {
+    prefs?.setInt('removeButtonTextColour', colour.toARGB32());
     notifyListeners();
   }
 
@@ -731,13 +758,11 @@ class SettingsProvider with ChangeNotifier {
         ActionBannerMode.values.any((m) => m.name == stored)) {
       return ActionBannerMode.values.byName(stored);
     }
-    final legacyBool = _getBool('showActionBannerForUpdateOnly');
-    if (legacyBool != null) {
-      return legacyBool
-          ? ActionBannerMode.updatesOnly
-          : ActionBannerMode.all;
-    }
-    return ActionBannerMode.updatesOnly;
+    // Fork: no banner unless explicitly asked for — the per-app update buttons
+    // and the selection menu cover the same ground without the header row.
+    // Upstream's legacy `showActionBannerForUpdateOnly` bool is deliberately
+    // not consulted, so the default holds for pre-existing installs too.
+    return ActionBannerMode.none;
   }
 
   set actionBannerMode(ActionBannerMode mode) {
