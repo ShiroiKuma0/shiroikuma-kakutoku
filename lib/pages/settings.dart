@@ -91,16 +91,25 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  /// Opens the colour picker on [colour] (the theme colour when omitted),
+  /// reporting every change to [onChanged]. Returns false when the user
+  /// dismissed the dialog, so the caller can restore the previous colour.
   Future<bool> showColorPickerDialog(
     SettingsProvider settingsProvider,
-    ColorSwatch<Object> obtainiumSwatch,
-  ) async {
+    ColorSwatch<Object> obtainiumSwatch, {
+    Color? colour,
+    void Function(Color)? onChanged,
+  }) async {
     final Map<ColorSwatch<Object>, String> colorsNameMap =
         <ColorSwatch<Object>, String>{obtainiumSwatch: '白い熊 獲得'};
     return ColorPicker(
-      color: settingsProvider.themeColor,
+      color: colour ?? settingsProvider.themeColor,
       onColorChanged: (Color color) {
-        settingsProvider.themeColor = color;
+        if (onChanged != null) {
+          onChanged(color);
+        } else {
+          settingsProvider.themeColor = color;
+        }
         setState(() {});
       },
       actionButtons: const ColorPickerActionButtons(
@@ -165,6 +174,54 @@ class _SettingsPageState extends State<SettingsPage> {
     sp.themeColor = previousColor;
     setState(() {});
   }
+
+  /// Fork: a colour tile for any settings colour — swatch on the right, picker
+  /// on tap, previous colour restored if the dialog is dismissed.
+  Widget _colourTile(
+    SettingsProvider settingsProvider, {
+    required String label,
+    required Color colour,
+    required void Function(Color) onChanged,
+  }) => CardTile(
+    child: ListTile(
+      contentPadding: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(connectedTileBigRadius),
+      ),
+      title: Text(label),
+      subtitle: Text(
+        '${ColorTools.nameThatColor(colour)} '
+        '(${ColorTools.materialNameAndCode(colour)})',
+      ),
+      trailing: ColorIndicator(
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        color: colour,
+        onSelectFocus: false,
+        onSelect: () async {
+          final Color colourBeforeDialog = colour;
+          // Only restore (and so only write the setting) if the picker actually
+          // changed something — opening and dismissing it must leave the
+          // setting unset, so it keeps following the app's default.
+          bool changed = false;
+          final kept = await showColorPickerDialog(
+            settingsProvider,
+            colour.toSwatch(),
+            colour: colour,
+            onChanged: (picked) {
+              changed = true;
+              onChanged(picked);
+            },
+          );
+          if (!kept && changed) {
+            onChanged(colourBeforeDialog);
+            setState(() {});
+          }
+        },
+      ),
+    ),
+  );
 
   void handleInstallerModeChange(
     SettingsProvider settingsProvider,
@@ -926,6 +983,19 @@ class _SettingsPageState extends State<SettingsPage> {
             }
           },
         ),
+      ),
+      // Fork: the app-removal dialog's confirm button is user-colourable.
+      _colourTile(
+        settingsProvider,
+        label: tr('removeButtonColour'),
+        colour: settingsProvider.removeButtonColour,
+        onChanged: (colour) => settingsProvider.removeButtonColour = colour,
+      ),
+      _colourTile(
+        settingsProvider,
+        label: tr('removeButtonTextColour'),
+        colour: settingsProvider.removeButtonTextColour,
+        onChanged: (colour) => settingsProvider.removeButtonTextColour = colour,
       ),
       ToggleTile(
         label: tr('tactileFeedbackEnabled'),

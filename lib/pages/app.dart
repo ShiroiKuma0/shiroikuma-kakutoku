@@ -638,14 +638,15 @@ class _AppPageState extends State<AppPage> {
     BuildContext context,
     AppInMemory? app,
     AppsProvider appsProvider,
-    bool areDownloadsRunning,
   ) {
     final installed = app?.app.installedVersion;
+    // Fork: only this app's own download blocks the button; other apps may be
+    // downloading or installing at the same time.
     final hasAction =
         app != null &&
         !updating &&
         (installed == null || skIsOutdated(app.app)) &&
-        !areDownloadsRunning;
+        !appsProvider.isAppObtaining(app.app.id);
     final trackOnly = app?.app.settings.getBool('trackOnly') == true;
     return FilledButton.icon(
       onPressed: hasAction ? () => _handleInstallOrUpdate(context, app) : null,
@@ -1249,33 +1250,40 @@ class _AppPageState extends State<AppPage> {
     bool showAppWebpageFinal,
     bool isVersionDetectionStandard,
     bool trackOnly,
-    bool areDownloadsRunning,
   ) {
+    final progress = app?.downloadProgress;
+    // Fork: queued = waiting for a download slot or for the install lock.
+    final queued = progress == queuedProgressSentinel;
+    final downloading = progress != null && progress >= 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (app?.downloadProgress != null)
+        if (progress != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
                 Expanded(
                   child: Semantics(
-                    label: app!.downloadProgress! >= 0
+                    label: downloading
                         ? tr(
                             'percentProgress',
-                            args: [app.downloadProgress!.toInt().toString()],
+                            args: [progress.toInt().toString()],
                           )
+                        : queued
+                        ? tr('queued')
                         : tr('installing'),
                     child: LinearProgressIndicator(
-                      value: app.downloadProgress! >= 0
-                          ? app.downloadProgress! / 100
+                      value: downloading
+                          ? progress / 100
+                          : queued
+                          ? 0
                           : null,
                     ),
                   ),
                 ),
-                if (app.downloadProgress! >= 0) ...[
+                if (downloading) ...[
                   const SizedBox(width: 8),
                   DownloadCancelButton(
                     onPressed: () => appsProvider.cancelDownload(widget.appId),
@@ -1284,9 +1292,7 @@ class _AppPageState extends State<AppPage> {
               ],
             ),
           ),
-        if (app?.downloadProgress != null &&
-            app!.downloadProgress! >= 0 &&
-            app.downloadReceivedBytes != null)
+        if (downloading && app!.downloadReceivedBytes != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
@@ -1312,12 +1318,7 @@ class _AppPageState extends State<AppPage> {
                 trackOnly,
               ),
               const Spacer(),
-              _getPrimaryButton(
-                context,
-                app,
-                appsProvider,
-                areDownloadsRunning,
-              ),
+              _getPrimaryButton(context, app, appsProvider),
             ],
           ),
         ),
@@ -1453,7 +1454,6 @@ class _AppPageState extends State<AppPage> {
                       showAppWebpageFinal,
                       isVersionDetectionStandard,
                       trackOnly,
-                      areDownloadsRunning,
                     ),
                   ),
                 ),

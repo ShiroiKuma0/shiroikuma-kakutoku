@@ -55,15 +55,15 @@ const int _bgInstallConfirmAttempts = 20; // 20 × 500ms = 10 seconds
 
 class _InstallResult {
   final String id;
-  final bool willBeSilent;
   final DownloadedApk? downloadedFile;
   final DownloadedDir? downloadedDir;
   const _InstallResult({
     required this.id,
-    required this.willBeSilent,
     this.downloadedFile,
     this.downloadedDir,
   });
+
+  bool get hasArtifact => downloadedFile != null || downloadedDir != null;
 }
 
 /// App download, install, and on-device package operations for [AppsProvider].
@@ -927,14 +927,23 @@ extension AppsProviderInstall on AppsProvider {
     Future<void> installChain = Future.value();
 
     Future<void> handleAppDownloadAndQueueInstall(String id) async {
-      final res = await _downloadAppForInstall(
-        id,
-        // ignore: use_build_context_synchronously
-        context,
-        notificationsProvider,
-        useExisting,
-        errors,
-      );
+      // Fork: bound how many downloads run at once rather than firing all of
+      // them together, and show an app as waiting while it holds no slot.
+      _setQueuedProgress(id);
+      await acquireDownloadSlot();
+      final _InstallResult res;
+      try {
+        res = await _downloadAppForInstall(
+          id,
+          // ignore: use_build_context_synchronously
+          context,
+          notificationsProvider,
+          useExisting,
+          errors,
+        );
+      } finally {
+        releaseDownloadSlot();
+      }
       if (!errors.appIdNames.containsKey(res.id)) {
         final isObtainium =
             res.id == obtainiumId ||
@@ -965,6 +974,14 @@ extension AppsProviderInstall on AppsProvider {
         }
       }
     }
+
+    // Fork: claim each app for this run, skipping any already in the pipeline
+    // from an overlapping run (a second tap, or a bulk run started while a
+    // per-app one is still going) so nothing is downloaded or installed twice.
+    // The claims are released in the finally below.
+    appsToInstall = appsToInstall
+        .where((id) => appsInObtainPipeline.add(id))
+        .toList();
 
     try {
       // Background tasks (forceParallelDownloads) run serially like main,
@@ -1005,6 +1022,7 @@ extension AppsProviderInstall on AppsProvider {
       // (e.g. unhandled error in a download, app backgrounded/killed, etc.)
       for (var id in appsToInstall) {
         apps[id]?.downloadProgress = null;
+        appsInObtainPipeline.remove(id);
       }
       notify();
     }
@@ -1272,6 +1290,15 @@ extension AppsProviderInstall on AppsProvider {
     }
   }
 
+  /// Fork: shows [id] as waiting its turn — for a download slot or for the
+  /// install lock.
+  void _setQueuedProgress(String id) {
+    final entry = apps[id];
+    if (entry == null) return;
+    entry.downloadProgress = queuedProgressSentinel;
+    notify();
+  }
+
   Future<_InstallResult> _downloadAppForInstall(
     String id,
     BuildContext? context,
@@ -1279,7 +1306,6 @@ extension AppsProviderInstall on AppsProvider {
     bool useExisting,
     MultiAppMultiError errors,
   ) async {
-    bool willBeSilent = false;
     DownloadedApk? downloadedFile;
     DownloadedDir? downloadedDir;
     try {
@@ -1328,7 +1354,6 @@ extension AppsProviderInstall on AppsProvider {
     }
     return _InstallResult(
       id: id,
-      willBeSilent: willBeSilent,
       downloadedFile: downloadedFile,
       downloadedDir: downloadedDir,
     );

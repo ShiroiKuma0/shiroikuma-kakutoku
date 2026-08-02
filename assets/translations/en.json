@@ -302,6 +302,7 @@
   "pleaseWait": "Please wait",
   "pseudoVersion": "pseudo-version",
   "pseudoVersionInUse": "A pseudo-version is in use",
+  "queued": "Queued",
   "randomColour": "Random colour",
   "rawJson": "Raw JSON",
   "refreshBeforeDownload": "Refresh app details before download",
@@ -315,6 +316,8 @@
     "one": "Remove app?",
     "other": "Remove apps?"
   },
+  "removeButtonColour": "Remove button colour",
+  "removeButtonTextColour": "Remove button text colour",
   "removeFromObtainium": "Remove from 白い熊 獲得",
   "removeOnExternalUninstall": "Automatically remove externally uninstalled apps",
   "removeOutdatedFilter": "Remove out-of-date app filter",
