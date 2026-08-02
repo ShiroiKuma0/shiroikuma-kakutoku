@@ -372,20 +372,26 @@ extension AppsProviderLifecycle on AppsProvider {
 
   Future<void> updateAppIcon(String? appId, {bool ignoreCache = false}) async {
     final app = apps[appId];
+    // Fork: a linked entry wears the icon of the local build it is compared
+    // against, in preference to the tracked package's own — and its cache
+    // goes stale with that build, not with the tracked package.
+    final iconSource = skIconSource(
+      app?.app,
+      app?.installedInfo,
+      app?.linkedInfo,
+    );
     final cachedIcon = File('${iconsCacheDir.path}/$appId.png');
     final cacheExists = cachedIcon.existsSync();
     final alreadyCached = isIconCacheUsable(
       ignoreCache: ignoreCache,
       cacheExists: cacheExists,
       cacheModified: cacheExists ? cachedIcon.lastModifiedSync() : null,
-      packageLastUpdateTime: app?.installedInfo?.lastUpdateTime,
+      packageLastUpdateTime: iconSource?.lastUpdateTime,
     );
     if (app?.icon == null || !alreadyCached) {
       final icon = alreadyCached
           ? (await cachedIcon.readAsBytes())
-          : (await app?.installedInfo?.applicationInfo?.getAppIcon()) ??
-                // Fork: linked apps show the icon of their local build.
-                (await app?.linkedInfo?.applicationInfo?.getAppIcon());
+          : await iconSource?.applicationInfo?.getAppIcon();
       if (icon != null && !alreadyCached) {
         unawaited(cachedIcon.writeAsBytes(icon));
       }
@@ -447,9 +453,12 @@ extension AppsProviderLifecycle on AppsProvider {
             : await linkedInfo?.applicationInfo?.getAppLabel();
         final Uint8List? icon = canReuse
             ? this.apps[app.id]!.icon
-            : (await info?.applicationInfo?.getAppIcon()) ??
-                  (await linkedInfo?.applicationInfo?.getAppIcon());
-        if (!canReuse && info == null && linkedInfo != null && icon != null) {
+            : await skIconSource(
+                app,
+                info,
+                linkedInfo,
+              )?.applicationInfo?.getAppIcon();
+        if (!canReuse && linkedInfo != null && icon != null) {
           // The icon cache is keyed by app ID, so refresh it whenever a linked
           // package supplies the icon — otherwise a re-link would keep showing
           // the previous build's icon after a restart.

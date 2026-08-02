@@ -112,10 +112,10 @@ class _SkInstalledAppPickerDialogState
     if (app == null) return false;
     final base = skStripVersion(info.versionName, app);
     if (base == null) return false;
-    final baseCommit = skExtractCommit(base);
-    final latestCommit = skExtractCommit(app.latestVersion);
-    if (baseCommit != null && latestCommit != null) {
-      return skCommitsMatch(baseCommit, latestCommit);
+    final baseCommits = skExtractCommits(base);
+    final latestCommits = skExtractCommits(app.latestVersion);
+    if (baseCommits.isNotEmpty && latestCommits.isNotEmpty) {
+      return skAnyCommitMatches(baseCommits, latestCommits);
     }
     return skCompareVersions(base, app.latestVersion) == 0;
   }

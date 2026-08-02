@@ -579,11 +579,16 @@ class _GeneratedFormState extends State<GeneratedForm> {
     if (item is GeneratedFormDropdown) return _buildDropdown(item);
     if (item is GeneratedFormSlider) return _buildSlider(item);
     if (item is GeneratedFormSwitch) {
+      // Fork: a switch that a currently-on switch declares it disables is
+      // inert while that one is on — the setting that wins says so on
+      // screen, instead of being silently undone by a later flip here.
+      final inert =
+          item.disabled || item.disabledBy.any((key) => values[key] == true);
       return ToggleTile(
         label: tr(item.label),
         value: values[item.key] as bool,
         noPadding: widget.noTilePadding,
-        onChanged: item.disabled
+        onChanged: inert
             ? null
             : hapticSwitchOnChanged(context, (value) {
                 setState(() {
