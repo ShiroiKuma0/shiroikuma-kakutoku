@@ -7,14 +7,14 @@
 **Get app updates straight from the source — in black and yellow.**
 
 A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with **major additions**: tracking an
-upstream project while comparing it against **your own build of it** (releases *or* git commits), a
-granular black-yellow 白い熊 獲得 UI theming page (colours, fonts, borders, sizes — all
-live-previewed), **category Export/Import** of the whole setup, **headless backup on demand** over a
-token-gated intent, and a tightened edge-to-edge main screen.
+upstream project while comparing it against **your own build of it** (releases *or* git commits),
+**updating several apps at once**, a granular black-yellow 白い熊 獲得 UI theming page (colours,
+fonts, borders, sizes — all live-previewed), **category Export/Import** of the whole setup,
+**headless backup on demand** over a token-gated intent, and a tightened edge-to-edge main screen.
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+019`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+022`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -35,6 +35,15 @@ For a GitHub project whose releases stand still for months while its branch move
 **commits** instead: the head is reported as `<commit date>.g<8-char sha>` — exactly the shape our
 git-versioned forks carry — and "up to date" means *your build is rebased onto that commit*. No
 version arithmetic, no false updates when a tag is re-cut; the sha decides.
+
+## ⚡ Update several apps at once
+Stock disables **every** app's download button the moment one download starts. Here each button
+watches only its own app, so you can tap as many as you like and they all run. Downloads go three
+at a time; installs go through a single lock, because the platform installer shows one prompt at a
+time — so install prompts never overlap and a download never waits on one. Each app installs the
+instant its own download lands, apps waiting their turn read **`Queued`**, and the same app can
+never be started twice by a double tap, a swipe, or a bulk run overlapping a single one. A
+self-update still goes last and alone.
 
 ## 🎨 白い熊 獲得 UI — granular theming page
 A dedicated theming screen in the sister-repo house style, reached from the top of Settings **or by
@@ -98,7 +107,14 @@ dialogs, inputs, switches, sliders, the FAB, search bar, and menus.
 
 ## 📱 Tightened main screen
 A compact app bar (no tall expanding header), full-width content with no dead side margins, and app
-cards that run nearly edge-to-edge.
+cards that run nearly edge-to-edge. The **Install/update apps** banner is off by default — the
+per-app buttons and the selection menu already do the job — and can be switched back on in Settings.
+
+## 🩸 A removal dialog that reads like one
+The confirm button says **Remove**, not "Continue", and sits at the far left with Cancel at the far
+right, so the destructive action is nowhere near the reflex tap. Dark blood red `#8B0000` in fill
+and border with a white label — **both colours settable in Settings** — while Cancel carries the
+accent border filled buttons wear in this theme.
 
 ---
 
