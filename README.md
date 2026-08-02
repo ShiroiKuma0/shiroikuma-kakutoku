@@ -14,7 +14,7 @@ fonts, borders, sizes — all live-previewed), **category Export/Import** of the
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+028`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+032`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -30,7 +30,16 @@ itself; the endless "mark updated" tapping is gone. Pick the local build from a 
 installed apps (icon, label, package, version, and a ✨ mark on the one that already matches). The
 entry then wears **that build's icon and label** — even when the tracked upstream is installed on
 the same phone — reads **`白い熊 獲得 ⇒ Obtainium`**, ours first, and names your build in full,
-`+NNN` counter included, so you can see at a glance which one is on the device.
+`+NNN` counter included, so you can see at a glance which one is on the device. When upstream moves
+ahead, the entry raises the **same download arrow as any other app with an update**; pressing it
+says which fork to rebase and onto which upstream version, since that APK is yours to build.
+
+## ✏️ Name each entry yourself
+Every entry's **Title** is editable and leads its Edit page, opening filled with the title it
+currently shows — so renaming is an edit, not a retype. A hand-set title replaces the whole line,
+which is what lets two entries tracking **sibling repos of one project** (a desktop repo and its
+Android port, say) be told apart. Leave it as found and it stays automatic, following the source
+and your build's label.
 
 ## 🌱 Follow git commits, not just releases
 For a GitHub project whose releases stand still for months while its branch moves daily, follow
