@@ -8,13 +8,13 @@
 
 A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with **major additions**: tracking an
 upstream project while comparing it against **your own build of it** (releases *or* git commits),
-**updating several apps at once**, a granular black-yellow 白い熊 獲得 UI theming page (colours,
+**waving through a push not worth rebuilding for**, **updating several apps at once**, a granular black-yellow 白い熊 獲得 UI theming page (colours,
 fonts, borders, sizes — all live-previewed), **category Export/Import** of the whole setup,
 **headless backup on demand** over a token-gated intent, and a tightened edge-to-edge main screen.
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+032`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+033`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -50,6 +50,17 @@ a tag is re-cut; the sha decides. A fork rebased onto **several** upstreams pins
 upstream, and **every** sha in the version is read, so each upstream gets its own entry and each
 matches its own pin. Pick a branch to follow, and the release-only options grey themselves out
 while commits are followed rather than quietly undoing the setting.
+
+## ✅ Wave a push through without rebuilding
+Not every commit upstream is worth a rebase and a rebuild — but until now the download arrow sat
+there all the same, and nothing short of building could clear it. **Set as updated** sits left of
+**Rebase & build** and does exactly that: it records the upstream version you waved through, and the
+entry reads as current until upstream **moves past it** — for a followed branch, until the next
+push, matched by the commit's identity rather than by the version literal around it. The mark is
+kept with the entry rather than faked into its installed version (which is read from your local
+build and would overwrite it within seconds), so it survives every refresh, every edit of the
+entry's options, and a restart. The detail page states plainly when an entry is current only by that
+mark and at which version, and **Reset install status** takes it back.
 
 ## 🔄 Refresh one source, not all of them
 Every app page carries a **Refresh from upstream** pill next to its primary button, so a single
