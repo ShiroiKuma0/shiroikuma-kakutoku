@@ -3,7 +3,119 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.10+022 — current
+## 1.6.10+033 — current
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490033`.
+
+### Set as updated (new)
+- **A push not worth a rebuild can now be waved through.** A commit-followed source moves on every
+  push, and most of those pushes are not worth rebasing and rebuilding the fork for — yet the
+  download arrow stayed up until one happened. **`Set as updated`** records the upstream version the
+  entry was told to ignore, and the entry counts as current until upstream **moves past it**.
+- **Matched by the commit, not by the version literal.** When both sides name a commit, identity
+  decides — the same sha spelled at a different length still reads as the same commit — and
+  otherwise the version strings must match exactly. Either way the very next push brings the entry
+  back.
+- **Kept with the entry, not faked into its installed version.** A linked entry's installed version
+  is refilled from the local build on every load, so a value written there would be undone within
+  seconds; the mark is stored as a per-app setting instead. It rides along with export/import,
+  survives an update check, and survives a trip through the **Additional options** page, whose form
+  knows nothing about it and would otherwise drop it on the way out.
+- **The whole app falls silent together.** The mark is read by the same `skIsOutdated` every
+  decision site already uses, so the list badge, the *Updates* filter, the update count and the
+  background notifications all clear with the arrow.
+- **The detail page says why.** An entry that reads as current only by that mark states it, and at
+  which version, under the linked-build note — nothing silently claims to be up to date.
+- **`Reset install status` is the undo**, clearing the mark along with the recorded install, since
+  the entry has gone up to date *by* that mark and there would be no other way back.
+- **The bottom bar takes a second row for it.** On a linked entry the icon actions and the
+  **`Refresh from upstream`** pill keep the top row, while **`Set as updated`** and
+  **`Rebase & build`** share the row below, half the width each — three buttons fit no phone-width
+  row. Entries without the new button keep the single row exactly as before, and the row does not
+  reshuffle mid-refresh: while a check or a download runs the button is disabled, not removed.
+
+## 1.6.10+032
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490032`.
+
+### Name each entry yourself
+- **The `Title` setting is now the whole title of an entry**, not one half of a composed one.
+  Upstream's *App name* override only ever replaced the source's name, so a linked entry still read
+  `<your build> ⇒ <source>` and two entries tracking **sibling repos of the same project** — a
+  desktop repo and its Android port — were indistinguishable in the list. A hand-set title now
+  replaces the line outright; the composed form moved to an internal `autoName` used only when no
+  title is set.
+- **It leads the Edit page** instead of sitting below the source's own switches, and **opens
+  prefilled** with the title the entry currently shows, so renaming is an edit rather than a retype.
+- **Handing the prefilled text back unchanged stores nothing.** That is what keeps an unrenamed
+  entry following its source's name and its linked build's label; clearing the field returns it to
+  automatic at any time.
+- The field is labelled **Title** (it was *App name*), in the Edit page and in *Filter apps* alike —
+  that filter matches the displayed title.
+
+### A linked entry's update points at the rebuild it needs
+- **The update button is back for linked entries**, wearing the **same filled download arrow** every
+  other app with an update carries. It had been hidden because a linked entry's installed version is
+  owned by the package it is compared against, so "mark updated" was undone by the very next save.
+- **Pressing it says what to do instead.** A dialog names the fork to rebase and the upstream
+  version to rebase onto, and points out that the entry clears itself as soon as the new build is on
+  the phone. The APK for these entries is yours to build; 白い熊 獲得 only tracks the source.
+- **The detail page's primary button follows the same route**, reading **`Rebase & build`** and
+  opening the same dialog, in place of a *Mark updated* that would have been undone anyway. It stays
+  disabled while the entry is up to date, and swipe-to-update still leaves linked entries alone.
+
+## 1.6.10+028
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490028`.
+
+### Refreshing one source
+- **A `Refresh from upstream` pill** sits in every app page's bottom bar, next to the primary
+  button. It re-checks that one source, so a single entry can be brought up to date without sweeping
+  everything you track, and greys out while a check or a download for that app is already running.
+- **Pull-down refresh on the app page now works at all.** The gesture was wired up from the start,
+  but the scroll view lacked `AlwaysScrollableScrollPhysics`: a page short enough to fit on the
+  screen could not overscroll, so the pull never reached the indicator.
+- **A running yellow progress line** appears just under the status bar for the duration of a check —
+  the same signal the main window shows — whether it came from the pill, the pull-down, or the
+  automatic check when the page opens.
+- The icon row scrolls sideways if it runs out of room, so the pill and the primary button keep
+  their full width on a narrow screen.
+
+### Comparing against your own build
+- **A linked entry takes its icon and label from the build it is linked to**, in preference to the
+  tracked package's own — an upstream that happens to be installed on the same phone no longer lends
+  the entry its icon. The on-disk icon cache refreshes whenever a link supplies the icon, so a
+  re-link survives a restart.
+- **The list names your build in full**, `+NNN` counter included (`0.25.1+039`, not `0.25.1`). The
+  stored installed version stays stripped, since that is the form the source's version is compared
+  against; only the label changed.
+- **Titles read ours-first**: `白い熊 自由動画 ⇒ FreeTube`, `白い熊 獲得 ⇒ Obtainium`.
+- **The two versions in the "Compared against" note line up under each other**, each on its own row
+  at the same left edge, instead of `(A → B)` where the leading parenthesis offset the first one by
+  half a character.
+
+### Following commits
+- **A followed commit carries the upstream version it sits on** — `0.2.79.2026-08-02.gbc343f35`
+  rather than a bare `2026-08-02.gbc343f35` — so both sides of the comparison read alike. The
+  version comes from the repo's latest release tag with a leading `v` dropped, falling back to its
+  newest tag. It is strictly a label: any failure, rate limits included, simply leaves it off rather
+  than failing an update check that already succeeded.
+- **Every `g<sha>` in a version string is read, not just the first.** A fork rebased onto more than
+  one upstream pins one sha per upstream, each upstream gets its own tracked entry, and an entry
+  counts as current as soon as **one** of those shas is the head it follows. Adjacent pins share the
+  `.` between them, so the separators are matched as lookarounds; consuming one used to hide the
+  next. The installed-app picker's ✨ suggestion follows the same rule.
+- **`Include prereleases` and `Fallback to older releases` grey out while commits are followed.**
+  They used to stay live and mutually exclusive, so switching one back on silently turned commit
+  following off again. A disabled toggle row now greys its whole row, not just the thumb.
+
+### List ordering
+- **Our own builds lead every block.** The ordering pass partitions them out first, and every split
+  that follows preserves the order it is handed, so 白い熊 entries head the updates-available,
+  installed and not-installed runs alike — each still alphabetical within, and the same inside
+  category and source groups.
+
+## 1.6.10+022
 
 Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490022`.
 
