@@ -353,6 +353,8 @@
   "selectX": "Select {}",
   "selectedCategorizeWarning": "This will replace any existing category settings for the selected apps.",
   "selfHostedNote": "The \"{}\" dropdown can be used to reach self-hosted/custom instances of any source.",
+  "setAsUpdated": "Set as updated",
+  "setAsUpdatedNote": "Set as updated at {} — not worth a rebuild, so this entry stays current until upstream moves past it.",
   "settings": "Settings",
   "share": "Share",
   "shareAppConfigLinks": "Share app configuration as HTML link",
