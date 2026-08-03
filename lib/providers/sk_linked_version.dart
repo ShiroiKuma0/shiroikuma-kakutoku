@@ -232,6 +232,59 @@ bool skCommitsMatch(String a, String b) => a.startsWith(b) || b.startsWith(a);
 bool skAnyCommitMatches(List<String> a, List<String> b) =>
     a.any((x) => b.any((y) => skCommitsMatch(x, y)));
 
+/// Fork: the upstream version an entry was waved through at.
+///
+/// A commit-followed source moves on every push, and most pushes are not worth
+/// rebuilding our fork for. "Set as updated" records the upstream version the
+/// entry was told to ignore; the entry then counts as current until upstream
+/// moves past it. It is stored as a setting rather than faked into
+/// `installedVersion`, which for a linked entry is refilled from the local
+/// build on every load and would undo it (see the correction pass in
+/// AppsProviderLifecycle).
+const String skSetUpdatedVersionKey = 'skSetUpdatedVersion';
+
+/// The version [app] was waved through at, or null when it was not.
+String? skSetUpdatedVersion(App app) {
+  final v = app.settings.getStringOrNull(skSetUpdatedVersionKey)?.trim();
+  return (v == null || v.isEmpty) ? null : v;
+}
+
+/// A copy of [app]'s settings with the waved-through version set to [version],
+/// or with the mark removed when it is null.
+Map<String, dynamic> skSettingsWithSetUpdated(App app, String? version) {
+  final settings = Map<String, dynamic>.from(app.additionalSettings);
+  if (version == null) {
+    settings.remove(skSetUpdatedVersionKey);
+  } else {
+    settings[skSetUpdatedVersionKey] = version;
+  }
+  return settings;
+}
+
+/// Whether what the entry now reports as latest is the version that was waved
+/// through. Commit identity decides when both name commits (the same commit is
+/// spelled at different sha lengths in different places); otherwise the version
+/// literals must match — so any move upstream brings the entry back.
+bool skIsSetUpdated(App app) {
+  final marked = skSetUpdatedVersion(app);
+  if (marked == null) return false;
+  final markedCommits = skExtractCommits(marked);
+  final latestCommits = skExtractCommits(app.latestVersion);
+  if (markedCommits.isNotEmpty && latestCommits.isNotEmpty) {
+    return skAnyCommitMatches(markedCommits, latestCommits);
+  }
+  return skDisplayVersion(marked) == skDisplayVersion(app.latestVersion);
+}
+
+/// Whether waving the current version through applies to [app]: a linked entry
+/// whose local build is behind its source. Nothing in the app can install such
+/// an entry — its APK is our own build of that source — so short of a rebase
+/// and rebuild, this is the only way to clear it.
+bool skCanSetUpdated(App app) =>
+    skLinkedPackage(app) != null &&
+    app.installedVersion != null &&
+    skIsOutdated(app);
+
 /// Drop-in replacement for `app.installedVersion != app.latestVersion`, adding
 /// the per-app "only if newer" rule for linked apps. Keeps the original null
 /// semantics: a never-installed app counts as outdated.
@@ -243,6 +296,9 @@ bool skIsOutdated(App app) {
   if (skDisplayVersion(installed) == skDisplayVersion(app.latestVersion)) {
     return false;
   }
+  // A push not worth a rebuild was waved through: the entry stays current
+  // until upstream moves past the version that was set as updated.
+  if (skIsSetUpdated(app)) return false;
   // Commits have no ordering, only identity: when both sides name one, being
   // rebased onto upstream's head IS being up to date, whatever the version
   // literals around it say. A build pinned to several upstreams carries one
