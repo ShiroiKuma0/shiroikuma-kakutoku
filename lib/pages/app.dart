@@ -294,6 +294,24 @@ class _AppPageState extends State<AppPage> {
     }
   }
 
+  /// Fork: wave the current upstream version through — the maintainer pushed
+  /// something not worth rebasing and rebuilding for, and the entry should stop
+  /// showing an update until upstream moves on. A linked entry takes its
+  /// installed version from the local build, so this is recorded as a setting
+  /// rather than written into `installedVersion`, which the next load would
+  /// overwrite.
+  Future<void> setAsUpdated(AppInMemory app) async {
+    settingsProvider.selectionClick();
+    await appsProvider.saveApps([
+      app.app.copyWith(
+        additionalSettings: skSettingsWithSetUpdated(
+          app.app,
+          app.app.latestVersion,
+        ),
+      ),
+    ]);
+  }
+
   Future<Map<String, dynamic>?> showAdditionalOptionsDialog(
     BuildContext context,
     AppInMemory? app,
@@ -449,6 +467,10 @@ class _AppPageState extends State<AppPage> {
     if (app != null && values != null) {
       final s = source;
       final Map<String, dynamic> originalSettings = app.app.additionalSettings;
+      // Fork: the options form knows nothing about a waved-through version, so
+      // handing its values back wholesale would drop the mark and the entry
+      // would report the same push as an update again.
+      final String? setUpdatedVersion = skSetUpdatedVersion(app.app);
       // Fork: the Title field was prefilled with the automatic title, so
       // handing it back unchanged must not freeze that text as an override —
       // it would then stop following a renamed linked build or a renamed
@@ -459,6 +481,14 @@ class _AppPageState extends State<AppPage> {
         values = Map<String, dynamic>.from(values)..['appName'] = '';
       }
       app.app = app.app.copyWith(additionalSettings: values);
+      if (setUpdatedVersion != null) {
+        app.app = app.app.copyWith(
+          additionalSettings: skSettingsWithSetUpdated(
+            app.app,
+            setUpdatedVersion,
+          ),
+        );
+      }
       if (s?.enforceTrackOnlyFor(app.app.additionalSettings) == true) {
         app.app = app.app.copyWith(
           additionalSettings: Map<String, dynamic>.from(
@@ -559,7 +589,13 @@ class _AppPageState extends State<AppPage> {
 
   void resetInstallStatus(AppInMemory? app) {
     if (app == null) return;
-    app.app = app.app.copyWith(installedVersion: null);
+    // Fork: a waved-through version is part of "this entry is current", so the
+    // reset undoes it too — otherwise a mis-tapped "set as updated" could never
+    // be taken back, the entry having gone up to date by that very mark.
+    app.app = app.app.copyWith(
+      installedVersion: null,
+      additionalSettings: skSettingsWithSetUpdated(app.app, null),
+    );
     unawaited(appsProvider.saveApps([app.app]));
   }
 
@@ -989,6 +1025,11 @@ class _AppPageState extends State<AppPage> {
     final realVersion = app?.installedInfo?.versionName;
     final apkCount = app?.app.apkUrls.length ?? 0;
     final changeLogFn = app != null ? getChangeLogFn(context, app.app) : null;
+    // Fork: an entry waved through with "set as updated" reads as current
+    // while its build is demonstrably behind — this says why, and at what.
+    final setUpdatedAt = app != null && skIsSetUpdated(app.app)
+        ? skDisplayVersion(app.app.latestVersion)
+        : null;
     return [
       _buildSection(
         true,
@@ -1012,6 +1053,8 @@ class _AppPageState extends State<AppPage> {
                     )
                   : tr('linkedAppNotInstalled', args: [linkedPackage]),
             ),
+          if (setUpdatedAt != null)
+            _detailNote(tr('setAsUpdatedNote', args: [setUpdatedAt])),
           if (pseudo)
             _detailNote(
               realVersion != null
@@ -1279,6 +1322,11 @@ class _AppPageState extends State<AppPage> {
     // Fork: queued = waiting for a download slot or for the install lock.
     final queued = progress == queuedProgressSentinel;
     final downloading = progress != null && progress >= 0;
+    // Fork: whether this entry gets the "set as updated" button — decided by
+    // the entry alone, so a refresh or a download does not reshuffle the row
+    // under 白い熊's finger; while one runs the button is merely disabled.
+    final showSetUpdated = app != null && skCanSetUpdated(app.app);
+    final canSetUpdated = showSetUpdated && !updating && progress == null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -1329,41 +1377,74 @@ class _AppPageState extends State<AppPage> {
           ),
         Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Fork: the icon actions give way first — the refresh pill and
-              // the primary button keep their full width on a narrow screen.
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _getSecondaryActions(
-                      context,
-                      app,
-                      source,
-                      appsProvider,
-                      settingsProvider,
-                      showAppWebpageFinal,
-                      isVersionDetectionStandard,
-                      trackOnly,
+              Row(
+                children: [
+                  // Fork: the icon actions give way first — the refresh pill and
+                  // the primary button keep their full width on a narrow screen.
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _getSecondaryActions(
+                          context,
+                          app,
+                          source,
+                          appsProvider,
+                          settingsProvider,
+                          showAppWebpageFinal,
+                          isVersionDetectionStandard,
+                          trackOnly,
+                        ),
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  // Fork: re-check this one app's source on demand, without
+                  // going back to the list and refreshing every app.
+                  SkPillButton(
+                    tr('refreshFromUpstream'),
+                    onPressed: app == null || updating || progress != null
+                        ? null
+                        : () {
+                            settingsProvider.selectionClick();
+                            unawaited(getUpdate(context));
+                          },
+                  ),
+                  // Fork: an entry that can be waved through needs a third
+                  // button, and no phone-width row fits all three — those two
+                  // take the row below, leaving the refresh pill up here.
+                  if (!showSetUpdated) ...[
+                    const SizedBox(width: 8),
+                    _getPrimaryButton(context, app, appsProvider),
+                  ],
+                ],
+              ),
+              if (showSetUpdated) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: canSetUpdated
+                            ? () => unawaited(setAsUpdated(app))
+                            : null,
+                        icon: const Icon(Icons.done_rounded),
+                        label: Text(
+                          tr('setAsUpdated'),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _getPrimaryButton(context, app, appsProvider),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              // Fork: re-check this one app's source on demand, without going
-              // back to the list and refreshing every app.
-              SkPillButton(
-                tr('refreshFromUpstream'),
-                onPressed: app == null || updating || progress != null
-                    ? null
-                    : () {
-                        settingsProvider.selectionClick();
-                        unawaited(getUpdate(context));
-                      },
-              ),
-              const SizedBox(width: 8),
-              _getPrimaryButton(context, app, appsProvider),
+              ],
             ],
           ),
         ),
