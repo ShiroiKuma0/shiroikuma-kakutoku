@@ -14,7 +14,7 @@ fonts, borders, sizes — all live-previewed), **category Export/Import** of the
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+034`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+035`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -25,7 +25,10 @@ For every project you follow only because you patch and build the fork yourself,
 **linked to the build installed on this phone**. Its "installed" version is then read from that
 package with the fork's `+N` build counter stripped, so upstream `1.6.10` and your
 `1.6.10+015` are recognised as the same release — and an update is reported only when upstream is
-**genuinely higher**, never merely different. Rebuild your fork, install it, and the entry clears
+**genuinely higher**, never merely different. A suffix that only names the **build variant** counts
+the same way: an upstream that cuts every release as `1.0.52-oss` is the same release as your
+`1.0.52`, not an update that can never be cleared. Anything carrying a digit — `-hotfix2`, a date, a
+commit sha — stays a real difference. Rebuild your fork, install it, and the entry clears
 itself; the endless "mark updated" tapping is gone. Pick the local build from a searchable dialog of
 installed apps (icon, label, package, version, and a ✨ mark on the one that already matches). The
 entry then wears **that build's icon and label** — even when the tracked upstream is installed on
