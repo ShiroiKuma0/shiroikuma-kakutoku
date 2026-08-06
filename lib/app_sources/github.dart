@@ -103,6 +103,30 @@ class GitHub extends AppSource {
         hint: tr('defaultBranch'),
       ),
     ],
+    // Fork: where the upstream version comes from while commits are followed.
+    // Without these the prefix is the repo's newest release tag, which is wrong
+    // for upstreams that tag something other than the version they ship.
+    [
+      GeneratedFormTextField(
+        'trackCommitsVersionFile',
+        label: tr('trackCommitsVersionFile'),
+        required: false,
+        hint: 'app/build.gradle.kts',
+      ),
+    ],
+    [
+      GeneratedFormTextField(
+        'trackCommitsVersionRegEx',
+        label: tr('trackCommitsVersionRegEx'),
+        required: false,
+        hint: _defaultVersionFileRegEx,
+        additionalValidators: [
+          (value) {
+            return regExValidator(value);
+          },
+        ],
+      ),
+    ],
     [
       GeneratedFormTextField(
         'filterReleaseTitlesByRegEx',
@@ -819,6 +843,11 @@ class GitHub extends AppSource {
     }
   }
 
+  /// Fork: the version literal nearly every Gradle project carries, used when
+  /// a version file is named without a regex of its own.
+  static const String _defaultVersionFileRegEx =
+      r'versionName\s*=\s*"([^"]+)"';
+
   /// Fork: a tag name as a version number — "v0.2.79" -> "0.2.79", the form
   /// our forks carry in their own version names. Null for an empty tag.
   String? _versionFromTag(String? tag) {
@@ -830,6 +859,60 @@ class GitHub extends AppSource {
       t = t.substring(1);
     }
     return t.isEmpty ? null : t;
+  }
+
+  /// Fork: the upstream version read out of a file in the repo, at the exact
+  /// commit being followed — for upstreams that never tag a release the version
+  /// they ship (Jami keeps `versionName = "20260731-01"` in its
+  /// `build.gradle.kts` and tags only `android/release_502`).
+  ///
+  /// Reading at the commit's own sha rather than at the branch tip is the whole
+  /// point: the version string then describes one commit consistently, instead
+  /// of pairing a sha with a version literal that moved after it.
+  ///
+  /// Best-effort like [_fetchUpstreamVersionPrefix] — a missing file, a
+  /// non-matching regex or an over-1MB file (which the contents API declines to
+  /// inline) all return null and leave the prefix to the release-tag lookup,
+  /// rather than failing an update check that already succeeded.
+  Future<String?> _fetchVersionFromRepoFile(
+    String apiUrl,
+    String sha,
+    Map<String, dynamic> additionalSettings,
+  ) async {
+    final path = (additionalSettings['trackCommitsVersionFile'] as String?)
+        ?.trim();
+    if (path == null || path.isEmpty) return null;
+    try {
+      final Response res = await sourceRequest(
+        '$apiUrl/contents/${path.split('/').map(Uri.encodeComponent).join('/')}'
+        '?ref=$sha',
+        additionalSettings,
+      );
+      if (res.statusCode != 200) return null;
+      final decoded = jsonDecode(res.body);
+      if (decoded is! Map || decoded['encoding'] != 'base64') return null;
+      final String? content = decoded['content'] as String?;
+      if (content == null || content.isEmpty) return null;
+      // The API wraps its base64 at 60 columns; the decoder rejects the breaks.
+      final String text = utf8.decode(
+        base64.decode(content.replaceAll(RegExp(r'\s'), '')),
+        allowMalformed: true,
+      );
+      final pattern = (additionalSettings['trackCommitsVersionRegEx'] as String?)
+          ?.trim();
+      final match = RegExp(
+        pattern == null || pattern.isEmpty
+            ? _defaultVersionFileRegEx
+            : pattern,
+      ).firstMatch(text);
+      if (match == null) return null;
+      final String? version = match.groupCount >= 1
+          ? match.group(1)
+          : match.group(0);
+      return _versionFromTag(version);
+    } catch (e) {
+      return null;
+    }
   }
 
   /// Fork: the upstream version a followed commit sits on, so the reported
@@ -874,12 +957,14 @@ class GitHub extends AppSource {
   /// our git-versioned forks embed in their own version — so "up to date"
   /// means "rebased onto this commit".
   ///
-  /// The date is the commit's own committer date, as the git-versioning skill
-  /// specifies, and is there to sort: a sha alone orders builds arbitrarily.
-  /// GitHub reports it in UTC while a fork's build script reads it in the
-  /// commit's own timezone, so the two can differ by a day near midnight —
-  /// harmless, since it is always the sha that decides whether a fork is
-  /// current.
+  /// The date is the commit's committer date **in UTC**, and is there to sort:
+  /// a sha alone orders builds arbitrarily. UTC is not a detail — GitHub
+  /// normalises committer dates to Z and drops the original offset, so it is
+  /// the only rendering both sides can compute. The git-versioning skill was
+  /// changed to match on 2026-08-06; a fork still pinning the commit's own
+  /// timezone (git's `--date=format:`) will disagree by a day for any commit
+  /// made late in a negative-offset evening, and a linked entry then shows an
+  /// update no rebase can satisfy.
   Future<APKDetails> _fetchLatestCommitDetails(
     String standardUrl,
     Map<String, dynamic> additionalSettings,
@@ -917,10 +1002,12 @@ class GitHub extends AppSource {
     final String datePrefix = commitDate != null
         ? '${commitDate.toUtc().toIso8601String().substring(0, 10)}.'
         : '';
-    final String? upstreamVersion = await _fetchUpstreamVersionPrefix(
-      apiUrl,
-      additionalSettings,
-    );
+    // A named version file wins: it is the version the followed commit itself
+    // declares, where the release tag is only the newest one the repo happens
+    // to carry. Falls back when unset, unreadable or unmatched.
+    final String? upstreamVersion =
+        await _fetchVersionFromRepoFile(apiUrl, sha, additionalSettings) ??
+        await _fetchUpstreamVersionPrefix(apiUrl, additionalSettings);
     final String versionPrefix = upstreamVersion != null
         ? '$upstreamVersion.'
         : '';
