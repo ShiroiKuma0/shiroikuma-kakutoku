@@ -98,13 +98,36 @@ final RegExp _preRelease = RegExp(
   r'^(dev|snapshot|nightly|alpha|beta|preview|pre|rc)[._\- ]?(\d*)(.*)$',
 );
 
+/// A tail that is nothing but words — "oss", "foss", "stable", "full-release".
+/// Upstreams tag build variants this way (Episteme cuts every Android release
+/// as `v<X.Y.Z>-oss`), and such a label is a constant of the project rather
+/// than a version component: it says which artifact was cut, not which release.
+/// Our own builds drop it, so treating it as unparsed left a linked entry
+/// reading "outdated" forever — the numeric parts tie, the tails differ, and
+/// [skCompareVersions] then refuses to order the two.
+///
+/// Digits are what separate a label from a respin: "-hotfix2", "-r2", "-1" all
+/// keep one and so stay unparsed, as do the date and `g<sha>` tails the
+/// git-versioning skill pins forks to — those must never be ordered, and
+/// [skIsOutdated] settles them by commit identity before ever reaching here.
+/// The parse has already lowercased, so matching `a-z` alone is enough.
+final RegExp _variantLabel = RegExp(r'^[a-z]+(?:[._\-+][a-z]+)*$');
+
+/// Whether what follows the understood part of a version leaves the parse
+/// exact: either nothing at all, or nothing but a variant label.
+bool _isTailUnderstood(String tail) {
+  final rest = tail.replaceFirst(RegExp(r'^[._\-+ ]+'), '');
+  return rest.isEmpty || _variantLabel.hasMatch(rest);
+}
+
 class _SkVersion {
   final List<int> parts;
   final int preRank;
   final int preNum;
 
   /// False when part of the string was not understood — the caller then
-  /// refuses to order two versions that differ only in that tail.
+  /// refuses to order two versions that differ only in that tail. A bare
+  /// build-variant label counts as understood; see [_variantLabel].
   final bool exact;
 
   const _SkVersion(this.parts, this.preRank, this.preNum, this.exact);
@@ -132,10 +155,10 @@ _SkVersion? _skParse(String raw) {
       parts,
       _preReleaseRanks[preMatch.group(1)!]!,
       int.tryParse(preMatch.group(2) ?? '') ?? 0,
-      preMatch.group(3)!.isEmpty,
+      _isTailUnderstood(preMatch.group(3)!),
     );
   }
-  return _SkVersion(parts, _finalReleaseRank, 0, false);
+  return _SkVersion(parts, _finalReleaseRank, 0, _isTailUnderstood(rest));
 }
 
 bool _isDigit(String c) => c.codeUnitAt(0) >= 48 && c.codeUnitAt(0) <= 57;
