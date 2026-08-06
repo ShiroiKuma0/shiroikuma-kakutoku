@@ -3,7 +3,28 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.10+034 — current
+## 1.6.10+035 — current
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490035`.
+
+### A build-variant suffix no longer reads as an update (fix)
+- **An upstream that tags its variant left a linked entry outdated forever.** Episteme cuts every
+  Android release as `v<X.Y.Z>-oss`. Our own build strips that, so the two versions tie on every
+  numeric part and differ only in the tail — and the comparator, unable to parse `-oss`, declined to
+  order them at all. That refusal is deliberately read as "assume an update", so `1.0.52` against
+  `1.0.52-oss` raised the download arrow on a fork that was exactly current, and no rebuild could
+  ever clear it.
+- **Such a tail is not a version component.** It names which artifact was cut, not which release,
+  and it is a constant of the project — so it is now *understood* rather than merely tolerated. A
+  tail of nothing but words leaves the parse exact, in the plain and the pre-release branch alike,
+  making `1.0.52-oss` and `1.0.52-beta-oss` equal to their bare forms.
+- **Digits are what keep it safe.** A respin (`-hotfix2`, `-r2`), and the date and `g<sha>` tails
+  the `git-versioning` skill pins forks to, all carry one and stay unparsed — those comparisons
+  remain exactly as conservative as before, so a real difference can still never be swallowed.
+- **Commit-pinned builds are untouched.** They are settled by commit identity before the comparator
+  is consulted at all, and their tails would not qualify as variant labels regardless.
+
+## 1.6.10+034
 
 Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490034`.
 
