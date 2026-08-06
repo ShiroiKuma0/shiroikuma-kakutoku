@@ -418,6 +418,8 @@
     },
     "trackCommits": "Follow commits instead of releases",
     "trackCommitsBranch": "Branch to follow",
+    "trackCommitsVersionFile": "Read the upstream version from this file",
+    "trackCommitsVersionRegEx": "Version regular expression for that file",
     "trackOnly": "Track-only",
     "trackOnlyAppDescription": "The app will be tracked for updates, but 白い熊 獲得 will not be able to download or install it.",
     "trackOnlyInBrackets": "(track-only)",
