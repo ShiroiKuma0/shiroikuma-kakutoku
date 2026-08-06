@@ -14,7 +14,7 @@ fonts, borders, sizes — all live-previewed), **category Export/Import** of the
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+033`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+034`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -49,7 +49,11 @@ date" means *your build is rebased onto that commit*. No version arithmetic, no 
 a tag is re-cut; the sha decides. A fork rebased onto **several** upstreams pins one sha per
 upstream, and **every** sha in the version is read, so each upstream gets its own entry and each
 matches its own pin. Pick a branch to follow, and the release-only options grey themselves out
-while commits are followed rather than quietly undoing the setting.
+while commits are followed rather than quietly undoing the setting. Where the project's version
+lives in a **file** rather than in a tag — Jami keeps `versionName = "20260731-01"` in its
+`build.gradle.kts` and tags only `android/release_502` — name that file and, if the default
+`versionName = "…"` does not fit, a regex; it is read **at the followed commit's own sha**, so the
+version and the sha always describe the same commit.
 
 ## ✅ Wave a push through without rebuilding
 Not every commit upstream is worth a rebase and a rebuild — but until now the download arrow sat
