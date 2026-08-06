@@ -3,7 +3,31 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.10+033 — current
+## 1.6.10+034 — current
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490034`.
+
+### The upstream version of a followed commit can come from a file in the repo (new)
+- **A release tag is the wrong source for projects that do not tag their version.** Commit tracking
+  prefixed its version with the repo's newest release tag, which only works where that tag *is* the
+  version. Jami keeps `versionName = "20260731-01"` in its `build.gradle.kts` and tags nothing but
+  `android/release_502`, so a followed commit reported `android/release_502.<date>.g<sha>` — a
+  string no rebase of the fork could ever match.
+- **Name the file instead, and optionally a regex.** Two new fields under **`Follow commits instead
+  of releases`** take a path in the repo and a pattern (default `versionName = "…"`, capture group
+  one), and the version they yield becomes the prefix.
+- **Read at the followed commit's own sha, not at the branch tip.** The whole string then describes
+  one commit, instead of pairing a sha with a version literal that moved after it.
+- **Best-effort, so nothing that works today can break.** An unset field, a missing file, a pattern
+  that does not match, or a file over 1 MB (which the contents API declines to inline) all fall back
+  to the release-tag lookup exactly as before.
+- **The commit date is stated as UTC.** GitHub normalises committer dates to `Z` and drops the
+  original offset, so UTC is the only rendering a fork's build script and this app can both compute.
+  A fork pinning the commit's *own* timezone disagrees by a day for roughly one upstream commit in
+  twenty — every one of them an update no rebase could satisfy. The `git-versioning` skill now
+  specifies UTC on the other side.
+
+## 1.6.10+033
 
 Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490033`.
 
