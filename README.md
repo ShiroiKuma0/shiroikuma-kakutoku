@@ -14,7 +14,7 @@ fonts, borders, sizes — all live-previewed), **category Export/Import** of the
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.10+035`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.10+036`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -142,8 +142,10 @@ way to flat.
 ## ⬛🟨 Black-yellow by default
 Pure yellow `#FFFF00` on black `#000000` (never the muddy material yellow) out of the box — text,
 borders, and icons in yellow, and **action buttons (Add, Update, per-app download) as black fill with
-yellow text and a yellow border**. The knob-driven theme covers the whole app: app bars, cards,
-dialogs, inputs, switches, sliders, the FAB, search bar, and menus.
+yellow text and a yellow border**. On such a button the fill is the page's own black, so the label
+and the border are the whole button — and **an action with nothing to do fades both**, rather than
+sitting there in full yellow looking like work waiting to be done. The knob-driven theme covers the
+whole app: app bars, cards, dialogs, inputs, switches, sliders, the FAB, search bar, and menus.
 
 ## 📱 Tightened main screen
 A compact app bar (no tall expanding header), full-width content with no dead side margins, and app
