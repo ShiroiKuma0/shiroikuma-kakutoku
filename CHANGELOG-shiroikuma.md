@@ -3,7 +3,27 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.10+035 — current
+## 1.6.10+036 — current
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490036`.
+
+### A disabled action button no longer reads as an update (fix)
+- **A dead button looked exactly like a live one.** The fork's filled-button theme pinned
+  foreground, border and fill with `WidgetStatePropertyAll` — one value for every widget state,
+  `disabled` included — which overrode Material's own dimming without putting anything in its place.
+  Black fill, yellow label, yellow border, whether the button did something or nothing.
+- **On the app page that was not merely cosmetic.** A linked entry's primary button always renders
+  and always reads **Rebase & build**, disabled only by a null press handler, so an entry that was
+  perfectly current showed what looked like a lit call to rebase — an update the entry itself never
+  claimed, its version line reading `Installed / Latest` a few rows above it.
+- **The label and the border are what fade.** They are the whole button, the fill being the page's
+  own black; dimming black against black would say nothing, so the fill stays put. The alpha is the
+  one `SkPillButton` already uses, so **Refresh from upstream** and **Rebase & build** fade alike
+  when they share a row.
+- **Every filled button in the app is covered** — dialog actions, the install/update banner, the
+  per-app download button — so a disabled action now reads as disabled wherever it appears.
+
+## 1.6.10+035
 
 Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490035`.
 
