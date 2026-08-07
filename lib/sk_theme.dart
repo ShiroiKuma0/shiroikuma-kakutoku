@@ -242,13 +242,27 @@ ThemeData buildSkTheme(SkUiKnobs k, String baseFontFamily) {
     ),
     // Filled buttons (e.g. the "Update" banner button, dialog actions):
     // black fill, accent text, accent border — the house action-button look.
+    //
+    // The fill is the page's own black, so the label and the border are the
+    // whole button: pinning them for every WidgetState left a disabled button
+    // (the app page's "Rebase & build" when there is nothing to rebase) looking
+    // exactly like a live one, which reads as an update that isn't there.
+    // Material's own dimming is overridden here, so the disabled state is spelt
+    // out — at SkPillButton's alpha, so the two buttons that share that row
+    // fade alike.
     filledButtonTheme: FilledButtonThemeData(
       style: pillButtonStyle.copyWith(
         backgroundColor: WidgetStatePropertyAll(k.fabBackground),
-        foregroundColor: WidgetStatePropertyAll(k.fabForeground),
-        side: WidgetStatePropertyAll(
-          BorderSide(
-            color: k.border,
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? k.fabForeground.withValues(alpha: 0.4)
+              : k.fabForeground,
+        ),
+        side: WidgetStateProperty.resolveWith(
+          (states) => BorderSide(
+            color: states.contains(WidgetState.disabled)
+                ? k.border.withValues(alpha: 0.4)
+                : k.border,
             width: k.borderWidth > 0 ? k.borderWidth : 1.5,
           ),
         ),
