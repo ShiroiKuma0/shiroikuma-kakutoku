@@ -3,7 +3,70 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.10+036 — current
+## 1.6.11+001 — current
+
+Base: upstream Obtainium **1.6.11** (`versionCode` 2350), fork `versionCode` `23500001`.
+
+First build on the new upstream line. Obtainium 1.6.11 is a large release — a codebase-wide
+refactor, a settings-page rewrite, and an install pipeline of its own — and in three places it
+arrived at the same problems the fork had already solved by hand. Those places were reconciled
+rather than re-patched, so the fork layer is now smaller than it was on 1.6.10.
+
+### Update detection runs through upstream's own choke point
+- **Upstream centralised the question the fork had been answering in eight places.** 1.6.11
+  introduces `isAppUpdateable`, one function deciding whether an app counts as having an update,
+  where 1.6.10 asked that inline at every call site — each of which the fork had patched to call
+  `skIsOutdated` instead.
+- **The fork's rules now live inside upstream's function.** `isAppUpdateable` consults
+  `skIsOutdated` first, so bare build-variant suffixes, pushes waved through with **Set as
+  updated**, commit identity for entries following an upstream head, and the linked-package "only
+  if newer" rule govern **every** call site — including any upstream adds later — instead of the
+  eight the fork used to hold open.
+- **`versionExtractionRegEx` works again.** The 1.6.10 patch had replaced the update-detection
+  block wholesale, taking upstream's version-extraction regex with it as collateral. Routing
+  through upstream's function restores it. With no regex configured — the default — nothing
+  changes.
+- **Update notifications honour "hide downgrades".** A source that moves *backwards* no longer
+  raises a notification when that setting is on. Linked entries are unaffected: they still answer
+  to `skIsOutdated` alone.
+
+### Upstream's install pipeline replaces the fork's
+- **Both had built the same thing.** Upstream 1.6.11 begins installing each app the moment its
+  download finishes, serialising the installs behind a chain — which is what the fork's install
+  queue did. Upstream's is now the one that runs, and the fork's `_obtainApp` machinery is gone.
+- **Self-update-last needed no porting.** Upstream moves 獲得 itself to the end of the queue and
+  defers its install until every other app is done, for the same reason the fork did: committing a
+  self-update can end the process and strand whatever is still queued behind it.
+- **Two things upstream does not do were kept.** Downloads stay **bounded** — upstream starts every
+  download at once, where the fork holds them to a few in flight so parsing does not saturate the UI
+  isolate — and an app waiting for a slot still shows as **queued** rather than blank. The
+  double-claim guard also stays: a second tap, or a bulk run started while a per-app one is going,
+  still cannot download or install the same app twice.
+
+### Settings moved into sub-pages
+- **Upstream split one long settings page into navigable sub-pages.** The **白い熊 獲得 UI**
+  theming page is a row there now, wearing a brush icon since upstream's own *Appearance* page took
+  the palette. Long-pressing the settings icon on the main screen still opens it directly.
+- **The fork's page footer is gone, because upstream's is.** The icon row it was built on no longer
+  exists; the **Help** link now lives in upstream's about section and still points at this repo.
+- The remove-button colour settings moved into the new tile list, unchanged.
+
+### What upstream 1.6.11 brings
+- Installs begin as each download completes during batch updates; parallel downloads default on.
+- A new **`obtainium://refresh`** deep link triggers an update check.
+- Background update checks are separated from silent installs: the interval gates checks, the
+  toggle gates installs only.
+- A failed install-status reconciliation no longer marks an app as up to date.
+- Settings reorganised into sub-pages; the filter dialog is now a bottom sheet; haptic feedback
+  across UI actions and the download/install lifecycle.
+- Export gains an installed-only filter; import reads via bytes when the path is null, fixing
+  import on Samsung devices.
+- Fixes for the vivo app store, uptodown (English locale, `.apk` extension), F-Droid
+  `versionCode`-as-version, `obtainium://` unicode double-decoding, and a per-app empty GitHub
+  token shadowing the global one.
+- `compileSdk` 37; `permission_handler` 13, `fluttertoast` 10 and `workmanager` 0.10.7.
+
+## 1.6.10+036
 
 Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490036`.
 
