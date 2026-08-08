@@ -63,15 +63,15 @@ const Duration _installConfirmTimeout = Duration(minutes: 10);
 
 class _InstallResult {
   final String id;
+  final bool willBeSilent;
   final DownloadedApk? downloadedFile;
   final DownloadedDir? downloadedDir;
   const _InstallResult({
     required this.id,
+    required this.willBeSilent,
     this.downloadedFile,
     this.downloadedDir,
   });
-
-  bool get hasArtifact => downloadedFile != null || downloadedDir != null;
 }
 
 /// App download, install, and on-device package operations for [AppsProvider].
@@ -1618,6 +1618,7 @@ extension AppsProviderInstall on AppsProvider {
     bool useExisting,
     MultiAppMultiError errors,
   ) async {
+    bool willBeSilent = false;
     DownloadedApk? downloadedFile;
     DownloadedDir? downloadedDir;
     try {
@@ -1666,6 +1667,7 @@ extension AppsProviderInstall on AppsProvider {
     }
     return _InstallResult(
       id: id,
+      willBeSilent: willBeSilent,
       downloadedFile: downloadedFile,
       downloadedDir: downloadedDir,
     );
