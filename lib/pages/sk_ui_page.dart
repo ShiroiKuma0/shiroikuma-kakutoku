@@ -11,10 +11,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:obtainium/components/sk_eximport.dart';
 import 'package:obtainium/components/sk_ui_widgets.dart';
-import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
 import 'package:obtainium/providers/sk_automation.dart';
 import 'package:obtainium/providers/sk_ui_provider.dart';
+import 'package:obtainium/utils/native_features.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
