@@ -720,6 +720,42 @@ class GitHub extends AppSource {
     return null;
   }
 
+  /// Fork: the repo's `releases/latest`, consulted when the release listing
+  /// came back empty. Null on anything but a usable release.
+  ///
+  /// GitHub sometimes serves an empty list for a repo that plainly has
+  /// releases: for premnirmal/StockTicker (2026-08) `/releases` answers `[]`
+  /// on every page — authenticated or not — while its own `Link` header
+  /// advertises 33 pages, and `/releases/latest` returns `4.1.004` with its
+  /// assets attached. Believed, the empty list drops a track-only entry into
+  /// the tag fallback, and a repo whose CI tags builds by counter then reports
+  /// a "version" like `300900767` that no build of ours can ever match.
+  ///
+  /// One extra request, only on the path that was about to fail anyway, and
+  /// only for the releases endpoint — the tag fallback re-enters this method
+  /// with a `/tags` URL, which has no `latest` of its own. Any failure leaves
+  /// that fallback to run exactly as before, which stays the right answer for
+  /// a repo that really has published nothing.
+  Future<dynamic> _fetchLatestReleaseFallback(
+    String requestUrl,
+    Map<String, dynamic> additionalSettings,
+  ) async {
+    final uri = Uri.parse(requestUrl);
+    if (!uri.path.endsWith('/releases')) return null;
+    try {
+      final Response res = await sourceRequest(
+        uri.replace(query: null, path: '${uri.path}/latest').toString(),
+        additionalSettings,
+      );
+      if (res.statusCode != 200) return null;
+      final decoded = jsonDecode(res.body);
+      if (decoded is! Map || decoded['draft'] == true) return null;
+      return (decoded['tag_name'] ?? decoded['name']) != null ? decoded : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Fetches and parses GitHub releases, applying sort/filter/prelease settings,
   /// then resolves the best matching release to an [APKDetails] result.
   Future<APKDetails> _fetchReleaseDetails(
@@ -785,6 +821,15 @@ class GitHub extends AppSource {
         throw NoReleasesError();
       }
       var releases = decoded;
+      // Fork: an empty listing is not proof of an empty repo — ask the one
+      // endpoint that still answers before believing it (see
+      // [_fetchLatestReleaseFallback]).
+      if (releases.isEmpty && latestRelease == null) {
+        latestRelease = await _fetchLatestReleaseFallback(
+          requestUrl,
+          additionalSettings,
+        );
+      }
       if (latestRelease != null) {
         final latestTag = latestRelease['tag_name'] ?? latestRelease['name'];
         if (releases
