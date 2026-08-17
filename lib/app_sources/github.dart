@@ -482,6 +482,34 @@ class GitHub extends AppSource {
       ? _getPublishDateFromRelease(rel)
       : _getNewestAssetDateFromRelease(rel);
 
+  /// Fork: orders two releases by date, with a name tie-break for the dateless.
+  ///
+  /// Every entry of the tag list the source falls back to when a repo lists no
+  /// releases is dateless — the tags endpoint reports none — and comparing two
+  /// of those as if one were newer is not an ordering at all: `compare(a, b)`
+  /// and `compare(b, a)` both said "later", so Dart's quicksort left the list
+  /// in an arbitrary permutation and "latest" came out a random tag
+  /// (premnirmal/StockTicker resolved to its 2020 CI tag `300900719`).
+  /// Dateless entries are therefore settled by name, which is the only thing
+  /// that distinguishes them, so such a list still resolves to its highest tag.
+  ///
+  /// A dateless entry still loses to a dated one: a release that does not say
+  /// when it was cut must never take "latest" from one that does.
+  int _compareReleasesByDate(
+    dynamic a,
+    dynamic b,
+    DateTime? dateA,
+    DateTime? dateB,
+  ) {
+    if (dateA != null && dateB != null) return dateA.compareTo(dateB);
+    if (dateA != null) return 1;
+    if (dateB != null) return -1;
+    return compareAlphaNumeric(
+      (a['tag_name'] ?? a['name'])?.toString() ?? '',
+      (b['tag_name'] ?? b['name'])?.toString() ?? '',
+    );
+  }
+
   void _sortGitHubReleases(
     List<dynamic> releases,
     String sortMethod,
@@ -517,7 +545,7 @@ class GitHub extends AppSource {
           b,
           () => _getReleaseDateFromRelease(b, useLatestAssetDateAsReleaseDate),
         );
-        return (dateA ?? DateTime(1)).compareTo(dateB ?? DateTime(0));
+        return _compareReleasesByDate(a, b, dateA, dateB);
       }
 
       final nameA = a['tag_name'] ?? a['name'];
@@ -533,7 +561,7 @@ class GitHub extends AppSource {
           b,
           useLatestAssetDateAsReleaseDate,
         );
-        return (dateA ?? DateTime(1)).compareTo(dateB ?? DateTime(0));
+        return _compareReleasesByDate(a, b, dateA, dateB);
       }
 
       if (sortMethod != 'name' && stdFormats.isNotEmpty) {
