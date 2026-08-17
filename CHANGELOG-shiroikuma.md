@@ -3,7 +3,39 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.11+001 — current
+## 1.6.11+003 — current
+
+Base: upstream Obtainium **1.6.11** (`versionCode` 2350), fork `versionCode` `23500003`.
+
+Two fixes to how the GitHub source resolves a repo whose release listing comes back empty — the
+case that had a linked entry reporting an update no rebase could ever satisfy. Build `+002` carried
+the second of them on its own.
+
+### An empty release listing is a claim to verify, not a fact
+- **GitHub sometimes serves `[]` for a repo that plainly has releases.** For
+  `premnirmal/StockTicker` the listing answers empty on every page — authenticated or not — while
+  its own `Link` header advertises 33 pages, and `releases/latest` returns `4.1.004` with its assets
+  attached.
+- **Believed, that empty list drops a track-only entry into the tag fallback**, where a repo that
+  tags its CI builds by counter offers nothing but numbers. The entry reported `300900767` as the
+  upstream version — a number no build of ours can ever match — so a `4.1.004` fork showed a
+  permanent phantom update.
+- **The source now asks `releases/latest` before concluding a repo has published nothing**, and
+  proceeds with that release when it answers. One extra request, only on the path that was about to
+  fail anyway, and only for the releases endpoint — the tag fallback re-enters the same code with a
+  `/tags` URL, which has no `latest` of its own. Any failure leaves the tag fallback to run exactly
+  as before, which stays the right answer for a repo that really has published nothing.
+
+### Dateless releases order by name instead of arbitrarily
+- **The tag list the source falls back to carries no dates**, and the date comparator answered
+  "later" for every dateless pair: `compare(a, b)` and `compare(b, a)` both said so, which is not an
+  ordering at all. Dart's quicksort then handed back an arbitrary permutation, and "latest" came out
+  a random tag — `300900719`, a CI counter from October 2020.
+- **Dateless entries are now settled by name**, so such a list resolves to its highest tag. A dated
+  release still outranks a dateless one: a release that does not say when it was cut must never take
+  "latest" from one that does.
+
+## 1.6.11+001
 
 Base: upstream Obtainium **1.6.11** (`versionCode` 2350), fork `versionCode` `23500001`.
 
