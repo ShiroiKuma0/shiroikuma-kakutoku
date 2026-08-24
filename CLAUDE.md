@@ -28,8 +28,10 @@ installable side-by-side with upstream Obtainium.
 
 ## Build, versioning, signing
 
-- **This is a Flutter app** (Dart ^3.12, Flutter ≥3.44). The pinned SDK lives at
-  **`/home/shiroikuma/flutter`** (3.44.6 stable) — the old `~/git/flutter` (3.13.5) cannot build it.
+- **This is a Flutter app** (Dart ^3.12, Flutter ≥3.44 declared — but 1.6.12 needs **3.47.1** in
+  practice: its `intl ^0.20.3` is unsatisfiable on any 3.44.x, whose `flutter_localizations` pins
+  `intl 0.20.2`). The pinned SDK lives at **`/home/shiroikuma/flutter`** (3.47.1 stable, upstream's
+  own `.flutter` commit) — the old `~/git/flutter` (3.13.5) cannot build it.
   Upstream also pins Flutter as the `.flutter` submodule; we build with `~/flutter` instead
   (leave the submodule uninitialized).
 - **Build env:** `export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/home/shiroikuma/android-sdk`.

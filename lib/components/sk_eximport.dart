@@ -723,16 +723,14 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
     final appsProvider = context.read<AppsProvider>();
     final settingsProvider = context.read<SettingsProvider>();
     final skUiProvider = context.read<SkUiProvider>();
-    FilePickerResult? picked;
+    PlatformFile? picked;
     try {
-      picked = await FilePicker.pickFiles();
+      picked = await FilePicker.pickFile();
     } catch (e) {
       if (mounted) setState(() => _error = 'No file picker available.');
       return;
     }
-    final path = (picked != null && picked.files.isNotEmpty)
-        ? picked.files.single.path
-        : null;
+    final path = picked?.path;
     if (path == null) return; // cancelled — leave the panel open
     if (!mounted) return;
     setState(() {
