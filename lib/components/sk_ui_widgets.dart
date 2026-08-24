@@ -673,11 +673,11 @@ class _SkFontPickerDialogState extends State<_SkFontPickerDialog> {
                   : () async {
                       setState(() => importing = true);
                       try {
-                        final res = await FilePicker.pickFiles(
+                        final res = await FilePicker.pickFile(
                           type: FileType.custom,
                           allowedExtensions: ['ttf', 'otf'],
                         );
-                        final path = res?.files.single.path;
+                        final path = res?.path;
                         if (path != null) {
                           final family = await sk.importFont(path);
                           if (family == null && context.mounted) {
