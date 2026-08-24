@@ -3,7 +3,57 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.11+003 — current
+## 1.6.12+001 — current
+
+Base: upstream Obtainium **1.6.12** (`versionCode` 2351), fork `versionCode` `23510001`.
+
+First build on the new upstream line. Obtainium 1.6.12 centralises logging, re-indents every
+translation file and re-wraps much of `lib/` with a newer Dart formatter, so most of the fork layer
+replayed mechanically — four places needed real reconciliation, and one dependency change had to be
+ported. Upstream's own notes for 1.6.12 (a Samsung Galaxy Store source, AppGallery fetched over its
+API, the RuStore 419 fix, opt-in certificate pinning) live in their release history.
+
+### The RTL arrow fix asks the fork what counts as an update
+- **Upstream added `isVersionUpdate()` and a direction override to go with it.** Under an RTL locale
+  the `old → new` transition was being bidi-mirrored, so an update read as a downgrade; 1.6.12
+  forces LTR on that line whenever an app has one.
+- **The helper it added compares two version strings for equality**, which is the question the fork
+  stopped asking long ago — a linked entry compares against an installed package, a git-followed
+  entry against a commit, and a bare build-variant suffix must not count at all.
+- **`isVersionUpdate()` now consults `skIsOutdated`**, so the forced direction and the text it
+  applies to agree on every entry. The fork's wrappable three-line version sits inside upstream's
+  new `Directionality`, so long git-versioned strings still fold instead of truncating.
+
+### App detail page keeps its own frame over upstream's structure
+- **Upstream reorganised the page's slivers**; the fork's `Stack`, its always-scrollable physics
+  (without which a page short enough to fit never hands the pull to the refresh indicator) and the
+  running line under the status bar replayed onto the new arrangement.
+- **Section spacings now use upstream's `AppSpacings.sectionGap`** rather than the literal `20` the
+  fork's older commits were written against. Same gap, one definition.
+
+### Settings, and the logging refactor underneath it
+- **`LogsProvider` is gone upstream**, replaced by `core/logging/AppLogger` with a log database of
+  its own. No fork code logged through it, so the refactor carried through untouched apart from a
+  dropped import.
+- **The 白い熊 獲得 UI row was re-inserted into upstream's re-nested settings tree**, keeping its
+  brush icon and its own full page.
+
+### Translations merged key by key
+- **Upstream re-indented every locale file from two spaces to four** — 926 changed lines in
+  `en.json` alone, of which ten are actual new keys.
+- **The fork's renames were replayed against the merge base rather than as a patch**, so upstream's
+  formatting and its new keys land intact while every 白い熊 獲得 value survives. `en.json` now
+  differs from upstream by exactly the sixteen rebranded strings.
+
+### Toolchain: Flutter 3.47.1, and a file picker that changed shape
+- **1.6.12 cannot be built on Flutter 3.44.x.** It requires `intl ^0.20.3`, and every 3.44 release
+  pins `flutter_localizations` to `intl 0.20.2`, so the pinned SDK moved to **3.47.1** — upstream's
+  own `.flutter` commit.
+- **That brought `file_picker` 12.0.0 stable, which deleted `FilePickerResult`**: `pickFiles()` now
+  answers a plain list. Both fork call sites — category import and font import — use the new
+  single-file `pickFile()` instead.
+
+## 1.6.11+003
 
 Base: upstream Obtainium **1.6.11** (`versionCode` 2350), fork `versionCode` `23500003`.
 
