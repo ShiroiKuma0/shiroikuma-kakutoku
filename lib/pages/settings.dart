@@ -447,9 +447,11 @@ class _SettingsPageState extends State<SettingsPage> {
                             context,
                             icon: Icons.brush_outlined,
                             title: '白い熊 獲得 UI',
-                            onTap: () => Navigator.of(
-                              context,
-                            ).push(MaterialPageRoute(builder: (_) => const SkUiPage())),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SkUiPage(),
+                              ),
+                            ),
                           ),
                           CardTile(
                             child: ListTile(
