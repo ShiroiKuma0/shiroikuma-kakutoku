@@ -21,7 +21,7 @@ description: Build the signed release APK of shiroikuma-kakutoku (the "白い熊
 
 ## Build environment (this machine)
 
-- **Flutter SDK:** `/home/shiroikuma/flutter` (3.44.6 stable) — pinned for this repo; the old
+- **Flutter SDK:** `/home/shiroikuma/flutter` (3.47.1 stable) — pinned for this repo; the old
   `~/git/flutter` (3.13.5) cannot build it. `build-fork.sh` hardcodes the right one.
 - The default `java` is **JDK 11**; `build-fork.sh` exports JDK 21 + `ANDROID_HOME` itself.
 
