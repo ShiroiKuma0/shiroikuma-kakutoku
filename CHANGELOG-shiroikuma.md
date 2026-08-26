@@ -3,7 +3,51 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.12+001 — current
+## 1.6.13+001 — current
+
+Base: upstream Obtainium **1.6.13** (`versionCode` 2352), fork `versionCode` `23520001`.
+
+The quietest rebase this fork has had. All 35 commits replayed with a single conflict — a context
+clash in `settings_provider.dart`, where the fork's remove-button colour constants sit between
+upstream's theme colour and `tryParseLocale` — and no fork behaviour needed rethinking. What is
+worth reading here is upstream's side: every one of 1.6.13's five new features lands in a file the
+fork patches, and all five merged clean.
+
+### Upstream's new settings arrived beside the fork's own
+- **Minimum age for updates**, global and per-app (`minimumUpdateAgeDays`), holds a release back
+  until it has been out N days — a supply-chain delay against a compromised build. It defaults to
+  off; once set, the fork's automation simply never sees the suppressed update, which is the
+  reading that was wanted.
+- **A global APK filter regex** now applies wherever an entry has no filter of its own, so the
+  per-app field becomes an override rather than the only place to say it.
+- **Skipping the bulk update/install confirmation** is optional now, gated in `apps.dart` right
+  above where the fork's own selection work sits.
+- **Collapsing all app groups on startup** is a setting rather than a thing to redo each launch.
+- All four tiles landed in upstream's re-nested settings tree without displacing the 白い熊 獲得
+  UI row.
+
+### Downloads: an opt-in that lets a source fall back to HTTP
+- **`AppSource` gained `allowInsecureRedirects`**, threaded through to the downloader. Vivo App
+  Store redirects its download URLs from HTTPS down to HTTP, and the redirect was being refused —
+  the source now opts in and its downloads work.
+- **Zipped APKs served over a direct link** are supported, with the container's file extension
+  preserved on download rather than assumed to be `.apk`.
+
+### A confirmation dialog that had been answering "no" all along
+- **`showContinueCancelDialog` always returned `false`.** Its `singleNullReturnButton` wiring made
+  the modal answer `null` on confirm, which the helper read as a cancel — quietly breaking log
+  deletion, categorisation and the release-date confirmation. Upstream dropped both the wiring and
+  the `continueText` parameter that fed it.
+- **The fork's three call sites never passed `continueText`**, and its own additions to
+  `ui_widgets.dart` — the rebuild-to-update dialog and the whole-row `ToggleTile` disable — sit
+  below the changed hunk, so the fix carried through untouched.
+
+### Logging catches what the framework throws
+- **`FlutterError.onError` now feeds the in-app log store**, alongside the existing
+  `PlatformDispatcher.onError` hook. Exceptions thrown inside UI handlers go to the former, so
+  until now they never reached the log at all.
+
+## 1.6.12+001
 
 Base: upstream Obtainium **1.6.12** (`versionCode` 2351), fork `versionCode` `23510001`.
 
