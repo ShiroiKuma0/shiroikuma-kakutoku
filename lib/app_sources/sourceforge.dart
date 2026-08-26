@@ -15,6 +15,52 @@ class SourceForge extends AppSource {
     hosts = ['sourceforge.net'];
   }
 
+  /// Fork: Android ABI tags as they appear at the end of a per-architecture
+  /// APK file name. Longest first, so `armeabi-v7a` is taken whole instead of
+  /// leaving a stray `-v7a` behind once `armeabi` has matched.
+  static const List<String> _abiSuffixes = [
+    'armeabi-v7a',
+    'arm64-v8a',
+    'armeabi',
+    'x86_64',
+    'mips64',
+    'arm64',
+    'mips',
+    'x86',
+  ];
+
+  /// Fork: strips a container extension and a trailing ABI tag from a file
+  /// name, so `emacs-32.0.50-35-arm64-v8a.apk` and its x86_64 sibling both
+  /// reduce to `emacs-32.0.50-35`.
+  ///
+  /// A project that keeps its APKs directly in `files/` has no version
+  /// directory for [getLatestAPKDetails] to read, so the file name itself ends
+  /// up standing in as the version. Each architecture's build then reads as a
+  /// separate release: the entry is left holding exactly one APK URL, and the
+  /// automatic ABI filter — which only acts on a list of two or more — never
+  /// gets to choose, so whichever architecture the feed happens to list first
+  /// is the one that gets installed. Reducing the variants of one build to a
+  /// single version hands that choice back.
+  static String stripApkExtensionAndAbi(String fileName) {
+    var out = fileName;
+    for (final ext in ApkFilterService.apkContainerExtensions) {
+      if (out.toLowerCase().endsWith(ext)) {
+        out = out.substring(0, out.length - ext.length);
+        break;
+      }
+    }
+    for (final abi in _abiSuffixes) {
+      final match = RegExp(
+        '[-_.]${RegExp.escape(abi)}\$',
+        caseSensitive: false,
+      ).firstMatch(out);
+      if (match != null) {
+        return out.substring(0, match.start);
+      }
+    }
+    return out;
+  }
+
   @override
   String sourceSpecificStandardizeURL(String url, {bool forSelection = false}) {
     final sourceRegex = getSourceRegex(hosts);
@@ -80,8 +126,15 @@ class SourceForge extends AppSource {
                 .where((element) => element.isNotEmpty)
                 .toList();
             if (segments.isNotEmpty) segments.removeLast();
+            // Fork: with no version directory above it, the file name is all
+            // that is left to stand in as the version — normalise it rather
+            // than take it verbatim (see stripApkExtensionAndAbi).
+            final bool versionIsFileName = segments.length == 1;
             if (segments.length > 1) segments.removeLast();
             var version = segments.isNotEmpty ? segments.join('/') : null;
+            if (version != null && versionIsFileName) {
+              version = stripApkExtensionAndAbi(version);
+            }
             if (version != null) {
               try {
                 final extractedVersion = extractVersion(
