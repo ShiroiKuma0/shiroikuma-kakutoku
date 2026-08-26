@@ -3,7 +3,38 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.13+001 — current
+## 1.6.13+002 — current
+
+Base: upstream Obtainium **1.6.13** (`versionCode` 2352), fork `versionCode` `23520002`.
+
+One fix, to a SourceForge layout that quietly defeated the automatic ABI filter.
+
+### A flat SourceForge project handed the phone the wrong architecture
+- **The driver reads a release's version from the path**, assuming the project is laid out as
+  `files/<version>/<file>.apk`. It strips the trailing `/download`, then strips the file name —
+  but only when a directory is left underneath it.
+- **A project that keeps its APKs directly in `files/` has no such directory**, so the file name
+  itself survives as the version. Every architecture's build then reads as a *separate release*:
+  the entry ends up holding exactly one APK URL, `filterApksByArch` only acts on a list of two or
+  more, and so whichever architecture the RSS feed happens to list first is the one that installs.
+- **For `android-ports-for-gnu-emacs` that is x86_64**, on a phone that is arm64 — and with a
+  single URL in the entry there was nothing to pick from in the APK list either. The feed carries
+  89 APKs across four versions and seven ABIs.
+- **`getVersion()` now detects the flat case** — nothing but the file name left once `/download`
+  has gone — and reduces the name through `stripApkExtensionAndAbi()`, which drops a container
+  extension and then a trailing ABI tag. `emacs-32.0.50-35-x86_64.apk` and
+  `emacs-32.0.50-35-arm64-v8a.apk` both become `emacs-32.0.50-35`, so the two group into one
+  release and the arch filter picks arm64-v8a. Projects laid out under a version directory read
+  exactly as they did before.
+- **The ABI list is ordered longest first**, so `armeabi-v7a` is taken whole rather than leaving a
+  stray `-v7a` behind once `armeabi` has matched, and the extension list is
+  `ApkFilterService.apkContainerExtensions` rather than a second copy of it.
+- **The version reads as the file name minus extension and ABI** (`emacs-32.0.50-35`) — truthful,
+  since guessing where the version sits inside an arbitrary file name is not something the driver
+  can do safely. A `versionExtractionRegEx` of `([\d.]+-\d+)$` on match group `1` shortens it to
+  `32.0.50-35` for anyone who wants that.
+
+## 1.6.13+001
 
 Base: upstream Obtainium **1.6.13** (`versionCode` 2352), fork `versionCode` `23520001`.
 
