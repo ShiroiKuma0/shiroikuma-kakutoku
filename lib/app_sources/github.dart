@@ -372,8 +372,8 @@ class GitHub extends AppSource {
   static bool _isAuthRejection(Response res) {
     if (res.statusCode != 401 && res.statusCode != 403) return false;
     try {
-      final message =
-          (jsonDecode(res.body)['message'] as String? ?? '').toLowerCase();
+      final message = (jsonDecode(res.body)['message'] as String? ?? '')
+          .toLowerCase();
       return message.contains('access token') ||
           message.contains('bad credentials');
     } catch (_) {
@@ -781,7 +781,7 @@ class GitHub extends AppSource {
     final uri = Uri.parse(requestUrl);
     if (!uri.path.endsWith('/releases')) return null;
     try {
-      final Response res = await sourceRequest(
+      final Response res = await _sourceRequestWithAuthFallback(
         uri.replace(query: null, path: '${uri.path}/latest').toString(),
         additionalSettings,
       );
@@ -963,8 +963,7 @@ class GitHub extends AppSource {
 
   /// Fork: the version literal nearly every Gradle project carries, used when
   /// a version file is named without a regex of its own.
-  static const String _defaultVersionFileRegEx =
-      r'versionName\s*=\s*"([^"]+)"';
+  static const String _defaultVersionFileRegEx = r'versionName\s*=\s*"([^"]+)"';
 
   /// Fork: a tag name as a version number — "v0.2.79" -> "0.2.79", the form
   /// our forks carry in their own version names. Null for an empty tag.
@@ -1001,7 +1000,7 @@ class GitHub extends AppSource {
         ?.trim();
     if (path == null || path.isEmpty) return null;
     try {
-      final Response res = await sourceRequest(
+      final Response res = await _sourceRequestWithAuthFallback(
         '$apiUrl/contents/${path.split('/').map(Uri.encodeComponent).join('/')}'
         '?ref=$sha',
         additionalSettings,
@@ -1016,12 +1015,10 @@ class GitHub extends AppSource {
         base64.decode(content.replaceAll(RegExp(r'\s'), '')),
         allowMalformed: true,
       );
-      final pattern = (additionalSettings['trackCommitsVersionRegEx'] as String?)
-          ?.trim();
+      final pattern =
+          (additionalSettings['trackCommitsVersionRegEx'] as String?)?.trim();
       final match = RegExp(
-        pattern == null || pattern.isEmpty
-            ? _defaultVersionFileRegEx
-            : pattern,
+        pattern == null || pattern.isEmpty ? _defaultVersionFileRegEx : pattern,
       ).firstMatch(text);
       if (match == null) return null;
       final String? version = match.groupCount >= 1
@@ -1048,7 +1045,7 @@ class GitHub extends AppSource {
     Map<String, dynamic> additionalSettings,
   ) async {
     try {
-      final Response res = await sourceRequest(
+      final Response res = await _sourceRequestWithAuthFallback(
         '$apiUrl/releases/latest',
         additionalSettings,
       );
@@ -1057,7 +1054,7 @@ class GitHub extends AppSource {
         return _versionFromTag(decoded?['tag_name'] as String?);
       }
       if (res.statusCode != 404) return null;
-      final Response tagRes = await sourceRequest(
+      final Response tagRes = await _sourceRequestWithAuthFallback(
         '$apiUrl/tags?per_page=1',
         additionalSettings,
       );
@@ -1096,7 +1093,10 @@ class GitHub extends AppSource {
     final url =
         '$apiUrl/commits?per_page=1'
         '${branch != null && branch.isNotEmpty ? '&sha=${Uri.encodeQueryComponent(branch)}' : ''}';
-    final Response res = await sourceRequest(url, additionalSettings);
+    final Response res = await _sourceRequestWithAuthFallback(
+      url,
+      additionalSettings,
+    );
     if (res.statusCode != 200) {
       rateLimitErrorCheck(res);
       throw getObtainiumHttpError(res);
