@@ -3,7 +3,75 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.13+002 — current
+## 1.6.14+001 — current
+
+Base: upstream Obtainium **1.6.14** (`versionCode` 2353), fork `versionCode` `23530001`.
+
+Thirty-nine commits replayed against three conflicts, every one of them the fork's rebranding
+meeting an upstream rewording rather than a disagreement about behaviour: `nl.json` tightening
+"GitHub pagina" to "GitHub-pagina", `ru.json` rephrasing the APK link filter and carrying our name
+in the link message, and `README.md`, where upstream's new Deep Links line landed inside the block
+the fork README replaces outright. Upstream's wording was kept in both translations; only the brand
+is ours.
+
+The interesting work was in the five files upstream and the fork both touch. All five merged
+textually — which is exactly when a rebase is worth distrusting, so each was read back to check it
+still means what it says.
+
+### A fix that a clean merge nearly rendered inert
+- **Upstream spaces out background retries for failing apps** (#3187): a check that fails still has
+  its `lastUpdateCheck` advanced, so the 15-minute background task stops hammering it and the app
+  becomes due again after a full update interval instead.
+- **It is implemented in three pieces** — a `failedApps` list declared before the loop, filled in
+  the per-app error path, and saved after it. The fork rewrote that loop long ago into
+  `fetchOne()` plus bounded concurrent workers, so the declaration and the save had somewhere
+  obvious to land while the population site did not.
+- **It landed inside `fetchOne()`'s catch block**, which is the one place that makes it work. Had
+  it merged anywhere else the list would have been declared, saved, and always empty — a fix that
+  compiles, analyses clean, and does nothing.
+
+### The install queue gained a way out of a lost result
+- **Foreground stock-installer installs now race the intent result against package polling**
+  (#3255), first conclusive outcome winning, with a ten-minute overall cap. An install result lost
+  because the activity was recreated while the user was at a system prompt no longer stalls
+  anything.
+- **This sits in the path the fork's serialized install queue feeds**, so the two compose: the
+  queue keeps installs one-at-a-time, and the race keeps a silent one from holding the queue shut.
+  Backgrounded and unconfirmed still waits, since the user may simply be reading the prompt.
+
+### GitHub: a rejected token stops being fatal — on the fork's paths too
+- **Upstream surfaces the real rejection message and retries without the token** (#3211) when
+  GitHub answers 401/403 with "bad credentials" or "not accessible by personal access token". A PAT
+  that is not authorised for a repository must not block updates of a public one.
+- **Only upstream's own call sites went through the new helper.** The fork's five — the
+  `releases/latest` fallback consulted when a release listing comes back empty, the upstream
+  version read out of a file in the repo, the upstream version prefix and its tag lookup, and the
+  followed-commit fetch — still called `sourceRequest` directly, so a rejected token would have
+  kept failing on precisely the paths this fork added.
+- **They now run through `_sourceRequestWithAuthFallback` as well**, which is the only change made
+  here beyond replaying the fork.
+
+### Third-party F-Droid repositories read the modern index
+- **`index-v2.json` is supported**, with `index.xml` kept as the fallback rather than combined with
+  it — a combine-both attempt was tried upstream and reverted.
+- **Non-stable releases are excluded from repo selection** via the suggested-version-code toggle,
+  and **App IDs pre-fill from an `appid` query parameter**, so adding from a repo search result no
+  longer leaves the ID blank.
+
+### The rest of upstream's 1.6.14
+- **A per-app minimum update age slider**, with "use global default" and "no delay" positions, as a
+  new form item. It survived the fork's card treatment: `isFieldRow` picked up the slider, and a
+  field row draws its own outline instead of being wrapped in a `ConnectedCard`.
+- **The category editor was reworked** — the new-category button flows inline with the chips, and
+  the edit sheet's action buttons no longer hide behind the system navigation bar.
+- **RuStore obtains again**, with certificate pinning implemented for it and the pinning bug that
+  ignored subdomains fixed; the Harica and Russian Mintsifry roots ship as bundled CA assets. All
+  of it merged clear of the fork's `HttpService` hunks.
+- **Huawei AppGallery** infers app IDs correctly after the `appdl` fallback removal, and stops
+  reading APK filename timestamps as versions when its API fails (#3247).
+- **Forgejo supports private overridden hosts** (#3198).
+
+## 1.6.13+002
 
 Base: upstream Obtainium **1.6.13** (`versionCode` 2352), fork `versionCode` `23520002`.
 
