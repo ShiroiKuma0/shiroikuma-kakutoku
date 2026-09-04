@@ -5,9 +5,13 @@
 // reports progress with real counts, and replies with the written path and
 // size. This file is this app's end of that wire:
 //
-//   * [SkAutomation] — the device-local switch (default OFF) and token.
+//   * [SkAutomation] — the device-local switches: automation ON by default,
+//     an OPT-IN token that is only consulted when 白い熊 asks for one.
 //   * [skAutomationMain] — the headless Dart entrypoint the native
 //     StateExportReceiver boots into a plain FlutterEngine (no Activity).
+//   * [skAutomationDataMain] — the same trick for the v2 data door: the
+//     entrypoint AutomationDataService boots to export this app's backup into
+//     a descriptor 応用管理 opened, and to put one back on a wiped phone.
 //
 // The export itself is NOT reimplemented here: `sk_eximport.dart` holds the one
 // export core, and the Export/Import panel and this receiver are its two thin
@@ -31,23 +35,56 @@ import 'package:shared_storage/shared_storage.dart' as saf;
 /// out of the export (see `_isAutomationKey` in `sk_eximport.dart`) — the token
 /// must never travel in a backup ZIP.
 const String skAutomationEnabledKey = 'skAutomationEnabled';
+const String skAutomationRequireTokenKey = 'skAutomationRequireToken';
 const String skAutomationTokenKey = 'skAutomationToken';
 
 /// The method channel shared with `StateExportReceiver.kt`.
 const String skAutomationChannel = 'dev.imranr.obtainium/sk_automation';
 
+/// The method channel shared with `AutomationDataService.kt` — the v2 data
+/// door. Its own channel and entrypoint, deliberately: the §1 broadcast path
+/// above is EMUI-proven and is not disturbed to make room for this one.
+const String skAutomationDataChannel = 'dev.imranr.obtainium/sk_automation_data';
+
 /// This app's display label, sent with every progress broadcast so 自由作業盤
 /// can name the app it is currently waiting on.
 const String skAppLabel = '白い熊 獲得';
 
-/// The automation gate: a switch 白い熊 turns on by hand, plus a token that
-/// must match on every single request.
+/// The automation gate: a switch that ships ON, and a token that is OFF until
+/// 白い熊 asks for one.
+///
+/// **v2 (2026-09-04) inverted both defaults, and the reason is the whole point
+/// of the change.** v1 shipped every app closed: the switch was off and a
+/// caller also had to present a 48-character secret pasted from this app's
+/// settings into the caller's. A pasted secret cannot survive a wipe — and the
+/// case this family exists to serve is 応用管理 restoring apps *and their data*
+/// onto a clean phone, where nothing has been configured and nobody has pasted
+/// anything. A gate that only works once the phone is already set up is no gate
+/// for setting the phone up.
+///
+/// This class is the AUTHORITATIVE gate: it owns the keys, and the Export /
+/// Import rows on the 白い熊 獲得 UI page write them. `SkAutomationGate.kt`
+/// mirrors it natively for the data door, which must answer inside a binder
+/// call and cannot boot an engine to ask. **Change a key or a default here and
+/// change it there** — that file says the same thing back.
 class SkAutomation {
+  /// v2 default **ON**: every app answers automation out of the box, so a
+  /// freshly restored phone is already on the 保存復元 batch. It stays a switch
+  /// because it is the only way to close this one app off.
   static bool isEnabled(SharedPreferences prefs) =>
-      prefs.getBool(skAutomationEnabledKey) ?? false;
+      prefs.getBool(skAutomationEnabledKey) ?? true;
 
   static Future<void> setEnabled(SharedPreferences prefs, bool value) =>
       prefs.setBool(skAutomationEnabledKey, value);
+
+  /// v2 default **OFF**: the token is an extra a caller may be asked for, not
+  /// the gate. Off means any sister app may drive the automation; the data door
+  /// checks the caller's package, uid and signing certificate either way.
+  static bool requiresToken(SharedPreferences prefs) =>
+      prefs.getBool(skAutomationRequireTokenKey) ?? false;
+
+  static Future<void> setRequireToken(SharedPreferences prefs, bool value) =>
+      prefs.setBool(skAutomationRequireTokenKey, value);
 
   /// The stored token, generated on first read so the settings row always
   /// shows a value.
@@ -74,15 +111,27 @@ class SkAutomation {
       ? token
       : '${token.substring(0, 8)}…${token.substring(token.length - 8)}';
 
-  /// null when the request may proceed, otherwise the short reason for the
-  /// `ERROR:` reply. "automation disabled" and "bad token" stay distinct —
-  /// they debug differently.
-  static String? verify(SharedPreferences prefs, String? candidate) {
-    if (!isEnabled(prefs)) return 'automation disabled';
+  /// null when the request may proceed, otherwise the exact `ERROR:` line to
+  /// answer with. Both checks live in this ONE function: two of them written
+  /// out at each entry point is how "disabled" and "bad token" drift apart
+  /// across forty-two apps. The two stay distinct as answers because they
+  /// debug differently.
+  ///
+  /// **A token handed to an app that does not require one is IGNORED. It is
+  /// never an error.** Tokens live in task arguments and workspace variables
+  /// that outlive the setting they were pasted for, and a caller still sending
+  /// one — because it was configured last year, or because another app on the
+  /// batch does want one — must be served. Refusing it would turn "白い熊
+  /// turned a switch off" into "half the batch mysteriously fails", which is
+  /// precisely the friction the switch exists to remove.
+  static String? refuse(SharedPreferences prefs, String? candidate) {
+    if (!isEnabled(prefs)) return 'ERROR:automation disabled';
+    if (!requiresToken(prefs)) return null;
     final stored = prefs.getString(skAutomationTokenKey);
-    if (stored == null || stored.isEmpty) return 'bad token';
-    if (candidate == null || candidate.isEmpty) return 'bad token';
-    return _constantTimeEquals(candidate, stored) ? null : 'bad token';
+    if (stored == null || stored.isEmpty) return 'ERROR:bad token';
+    if (candidate == null || candidate.isEmpty) return 'ERROR:bad token';
+    // Constant-time compare stays for the case where the token IS required.
+    return _constantTimeEquals(candidate, stored) ? null : 'ERROR:bad token';
   }
 
   /// Compares in constant time — no early exit on the first differing byte.
@@ -113,6 +162,30 @@ String skCategoriesReply() => 'OK:${SkExportCat.values.map((c) {
   return '${c.id}\t${c.label}\t\t$on';
 }).join('\n')}';
 
+/// Resolves an `items` list into categories.
+///
+/// Absent or empty means this app's **default set** — the ones it reports as
+/// `on` from `LIST_CATEGORIES`, which is not the same as everything. null means
+/// the list named something this app does not export, which is an error the
+/// caller must see rather than a backup quietly missing a category.
+///
+/// Both doors resolve `items` through here: the §1 broadcast export and the
+/// §2a data door must agree on what a caller asked for.
+Set<SkExportCat>? skResolveCats(String? raw) {
+  final itemsRaw = raw?.trim() ?? '';
+  if (itemsRaw.isEmpty) return skDefaultCats();
+  final byId = {for (final c in SkExportCat.values) c.id: c};
+  final picked = <SkExportCat>{};
+  for (final entry in itemsRaw.split(',')) {
+    final id = entry.trim();
+    if (id.isEmpty) continue;
+    final cat = byId[id];
+    if (cat == null) return null;
+    picked.add(cat);
+  }
+  return picked.isEmpty ? null : picked;
+}
+
 /// The `reply_id` of the export running right now, or null when none is. Two
 /// exports at once are forbidden by the contract, so one slot is enough — the
 /// id only narrows WHICH run a `CANCEL_EXPORT` may target.
@@ -133,7 +206,7 @@ Future<bool> skHandleCancel(Map<String, Object?> request) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
-    if (SkAutomation.verify(prefs, request['token'] as String?) != null) {
+    if (SkAutomation.refuse(prefs, request['token'] as String?) != null) {
       return false;
     }
     final running = _runningExportReplyId;
@@ -213,8 +286,8 @@ Future<String> skHandleAutomationRequest(
     // The engine outlives a single request and the UI runs in its own engine,
     // so re-read the switch and token from disk on every request.
     await prefs.reload();
-    final denied = SkAutomation.verify(prefs, request['token'] as String?);
-    if (denied != null) return 'ERROR:$denied';
+    final denied = SkAutomation.refuse(prefs, request['token'] as String?);
+    if (denied != null) return denied;
     switch (request['action']) {
       case 'categories':
         return skCategoriesReply();
@@ -257,22 +330,8 @@ Future<String> _exportInner(
 ) async {
   // ---- items: which categories (absent/empty = this app's default set) ----
   final itemsRaw = (request['items'] as String?)?.trim() ?? '';
-  final Set<SkExportCat> cats;
-  if (itemsRaw.isEmpty) {
-    cats = skDefaultCats();
-  } else {
-    final byId = {for (final c in SkExportCat.values) c.id: c};
-    final picked = <SkExportCat>{};
-    for (final raw in itemsRaw.split(',')) {
-      final id = raw.trim();
-      if (id.isEmpty) continue;
-      final cat = byId[id];
-      if (cat == null) return 'ERROR:unknown category in items: $itemsRaw';
-      picked.add(cat);
-    }
-    if (picked.isEmpty) return 'ERROR:unknown category in items: $itemsRaw';
-    cats = picked;
-  }
+  final cats = skResolveCats(itemsRaw);
+  if (cats == null) return 'ERROR:unknown category in items: $itemsRaw';
 
   // ---- destination: `path` extra → the configured export folder → error ----
   final settingsProvider = SettingsProvider();
@@ -410,4 +469,187 @@ String? _absolutePathForTreeUri(Uri treeUri) {
 String _oneLine(String s) {
   final flat = s.replaceAll(RegExp(r'\s+'), ' ').trim();
   return flat.length <= 300 ? flat : '${flat.substring(0, 297)}…';
+}
+
+// ---------------------------------------------------------------------------
+// §2a — the data door: this app's backup through a descriptor 応用管理 opened
+// ---------------------------------------------------------------------------
+//
+// The native half is `android/app/src/main/kotlin/dev/imranr/obtainium/
+// automation/` — a ContentProvider that identifies its caller by exact package
+// name, uid and pinned signing certificate, and a foreground service that moves
+// the bytes. This is the Dart half: the same export core as everything else,
+// and the import the broadcast contract deliberately does NOT expose.
+//
+// **The gate is not re-checked here.** `AutomationProvider.call()` has already
+// run it — natively, through `SkAutomationGate`, because it must answer inside
+// a binder call — and nothing reaches this entrypoint without passing it.
+
+/// The data-door job running right now, or null when none is.
+String? _dataJobId;
+
+/// Set when the service relays a `cancel`. The export reads it at every entry
+/// boundary, so it unwinds between files rather than mid-write.
+bool _dataCancelled = false;
+
+/// The headless entrypoint `AutomationDataService.kt` boots.
+///
+/// Its own entrypoint and channel rather than [skAutomationMain]'s: the §1
+/// broadcast path is EMUI-proven and is not disturbed to make room for this.
+@pragma('vm:entry-point')
+void skAutomationDataMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  const channel = MethodChannel(skAutomationDataChannel);
+  channel.setMethodCallHandler((call) async {
+    final args = call.arguments is Map
+        ? Map<String, Object?>.from(call.arguments as Map)
+        : <String, Object?>{};
+    switch (call.method) {
+      case 'cancel':
+        return _dataCancel(args);
+      case 'export':
+        return skAutomationDataExport(args, (progress) {
+          unawaited(
+            channel.invokeMethod('progress', {
+              'job_id': args['job_id'],
+              ...progress,
+            }),
+          );
+        });
+      case 'import':
+        return skAutomationDataImport(args);
+      default:
+        return null;
+    }
+  });
+  unawaited(channel.invokeMethod('ready'));
+}
+
+/// A cancel for the data door. Silent no-op when nothing is running or the id
+/// belongs to another job — a cancel arriving after the work finished is the
+/// normal race, not an error.
+bool _dataCancel(Map<String, Object?> request) {
+  final running = _dataJobId;
+  if (running == null) return false;
+  final target = (request['job_id'] as String?)?.trim() ?? '';
+  if (target.isNotEmpty && target != running) return false;
+  _dataCancelled = true;
+  return true;
+}
+
+/// Builds this app's backup and hands the bytes back for the service to write
+/// into the caller's descriptor.
+///
+/// Answers a map rather than a result line because the payload travels with it:
+/// `{bytes, categories}` on success, `{error}` on anything else. Never throws —
+/// the service must always have something to reply.
+Future<Map<String, Object?>> skAutomationDataExport(
+  Map<String, Object?> request,
+  void Function(Map<String, Object?>) sendProgress,
+) async {
+  _dataJobId = (request['job_id'] as String?) ?? '';
+  _dataCancelled = false;
+  try {
+    final itemsRaw = (request['items'] as String?)?.trim() ?? '';
+    final cats = skResolveCats(itemsRaw);
+    if (cats == null) return {'error': 'unknown category in items: $itemsRaw'};
+    final settingsProvider = SettingsProvider();
+    await settingsProvider.initializeSettings();
+    final appsProvider = AppsProvider(
+      isBg: true,
+      settingsProvider: settingsProvider,
+    );
+    await appsProvider.loadApps();
+    final skUiProvider = SkUiProvider();
+    await skUiProvider.initializeWithoutFonts();
+    final progress = _ProgressSink(sendProgress);
+    final bytes = await skBuildExportZip(
+      appsProvider: appsProvider,
+      settingsProvider: settingsProvider,
+      skUiProvider: skUiProvider,
+      cats: cats,
+      onProgress: progress.report,
+      isCancelled: () => _dataCancelled,
+    );
+    // Nothing has been written into the caller's file yet, so a cancel landing
+    // here costs the caller nothing to clean up — the descriptor is closed and
+    // the archive it was opened for never arrives.
+    if (_dataCancelled) return {'error': 'cancelled'};
+    progress.report(
+      cats.length,
+      cats.length,
+      '区分',
+      '区分 ${cats.length}/${cats.length} — ${skHumanSize(bytes.length)}',
+      force: true,
+    );
+    return {'bytes': bytes, 'categories': cats.length};
+  } on SkExportCancelled {
+    return {'error': 'cancelled'};
+  } catch (e) {
+    return {'error': _oneLine(e.toString())};
+  } finally {
+    _dataJobId = null;
+    _dataCancelled = false;
+  }
+}
+
+/// Puts a backup back — the half that exists ONLY behind the provider.
+///
+/// An import overwrites this app's data, and the §1 receiver is exported with
+/// no permission: an import action there would let any app on the phone wipe
+/// any sister app. Here the caller has been identified by package, uid and
+/// signing certificate before a byte was read.
+///
+/// The whole archive is in hand before anything is touched — a partial read
+/// that failed halfway would import half a backup, and a half-restored app is
+/// worse than one that refused. Categories absent from the archive are skipped
+/// and existing data is merged, never wiped, exactly as the Export/Import panel
+/// does it.
+Future<Map<String, Object?>> skAutomationDataImport(
+  Map<String, Object?> request,
+) async {
+  _dataJobId = (request['job_id'] as String?) ?? '';
+  _dataCancelled = false;
+  try {
+    final raw = request['bytes'];
+    if (raw is! Uint8List || raw.isEmpty) return {'error': 'empty archive'};
+    final decoded = skDecodeExportBytes(raw);
+    // Every category the archive actually carries, not every category we know
+    // about: asking for one the archive lacks is how a restore ends up
+    // reporting success over nothing.
+    final data = decoded['data'];
+    final present = <SkExportCat>{};
+    if (data is Map) {
+      for (final cat in SkExportCat.values) {
+        if (data[cat.id] != null) present.add(cat);
+      }
+    }
+    if (present.isEmpty) return {'error': 'archive carries no categories'};
+    if (_dataCancelled) return {'error': 'cancelled'};
+    final settingsProvider = SettingsProvider();
+    await settingsProvider.initializeSettings();
+    final appsProvider = AppsProvider(
+      isBg: true,
+      settingsProvider: settingsProvider,
+    );
+    await appsProvider.loadApps();
+    final skUiProvider = SkUiProvider();
+    await skUiProvider.initializeWithoutFonts();
+    final summary = await skApplyImport(
+      decoded: decoded,
+      cats: present,
+      appsProvider: appsProvider,
+      settingsProvider: settingsProvider,
+      skUiProvider: skUiProvider,
+    );
+    // 応用管理 force-stops this app the instant it hears success, and that is
+    // deliberate: a running process writes its cached SharedPreferences back
+    // out at orderly shutdown and would silently undo what was just imported.
+    return {'restored': present.length, 'summary': _oneLine(summary)};
+  } catch (e) {
+    return {'error': _oneLine(e.toString())};
+  } finally {
+    _dataJobId = null;
+    _dataCancelled = false;
+  }
 }
