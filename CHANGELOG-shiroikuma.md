@@ -3,7 +3,109 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.14+001 — current
+## 1.6.14+004 — current
+
+Base: upstream Obtainium **1.6.14** (`versionCode` 2353), fork `versionCode` `23530004`.
+
+The sister-app automation contract moves to **v2**: the gate opens by default, the token becomes
+something a caller may be asked for rather than the thing that lets it in, and a second, identified
+door is added through which this app can be backed up **with its data** and have it put back on a
+wiped phone.
+
+### The gate: a switch that ships ON, and a token that is OFF
+- **`automation_enabled` now defaults to true and a new `automation_require_token` defaults to
+  false.** v1 shipped closed: the switch was off and a caller also had to present a 48-character
+  secret pasted from this app's settings into the caller's. That is the wrong shape for what this
+  is now for — **a pasted secret cannot survive a wipe**, and the case being served is a clean
+  phone where nothing has been configured and nobody has pasted anything. A gate that only works
+  once the phone is already set up is no gate for setting the phone up.
+- **A token sent to an app that does not require one is IGNORED, never refused.** Tokens outlive
+  the settings they were pasted for, and a caller still sending one — because it was configured
+  last year, or because another app on the batch does want one — must still be served. Refusing it
+  would turn "one switch was turned off" into "half the batch mysteriously fails".
+- **Both checks live in one function.** Two of them written out at each entry point is how
+  "automation disabled" and "bad token" drift apart; the two stay distinct as answers because they
+  debug differently. The constant-time compare stays for when the token really is required.
+- **Three rows, inside the existing Export / Import section** rather than a section of their own,
+  because this is a backup feature and that is where backup lives: the master switch, then
+  「Use authorization token?」, then the token row — **shown only when the token is being asked
+  for**, since a 48-character secret sitting under an off switch invites pasting it somewhere it
+  will do nothing. The token is generated on first read, which is now the moment it is first
+  wanted rather than the moment the page opens.
+
+### A data door: a provider, a verified caller, and a file descriptor
+- **A new `ContentProvider` at `shiroikuma.kakutoku.automation`** answers `describe`, `export`,
+  `import` and `cancel`, in the same `OK:` / `ERROR:` grammar the broadcast contract already used.
+  It exists because **a broadcast cannot tell you who sent it** — which is precisely what the
+  shared secret used to paper over — while a provider is handed the caller's identity by the
+  framework. It also answers synchronously, which a companion drawing one row per installed app
+  needs and a broadcast round trip per app cannot give.
+- **The caller is checked three ways, and each exists because the one before it is not enough:**
+  an **exact package name** from a fixed map — never a prefix, because a prefix is not an identity
+  and any sideloaded app may call itself `shiroikuma.evil`; the **uid the kernel reports**, since a
+  declared attribution can be borrowed and a uid cannot; and a **pinned signing certificate**,
+  which is what closes the real gap — whichever caller package is absent from the device is a name
+  anyone can take, and a clean phone is exactly a device where not everything is installed yet.
+- **The payload travels through a `ParcelFileDescriptor` the caller opens** — not a path, not a
+  `content://` URI. A backup is not a stable directory while it is being assembled, encryption and
+  checksums are computed per file the owner knows about, and a file this app dropped in itself
+  would sit unencrypted and unverified inside someone else's archive. The descriptor is duplicated
+  before it leaves the provider call and closed on the single terminal answer. A consequence worth
+  having: the automation path **no longer needs All-files access** at all.
+- **Import exists ONLY here.** It never gets a broadcast action: an import overwrites this app's
+  data, and the broadcast receiver is exported with no permission, so an import there would let any
+  app on the phone wipe any sister app.
+- **The work runs in a foreground service**, never in the provider call or a receiver: a binder
+  call would hold the caller's UI, report no progress and refuse cancellation, and a backgrounded
+  app writing for minutes is frozen mid-stream on this phone — which yields a truncated archive
+  underneath a success reply, the one failure indistinguishable from a good backup until the day
+  someone restores it.
+- **Capability discovery lives in the manifest** — `shiroikuma.automation.contract`, `format` and
+  `min_format` — because a **frozen app cannot be asked anything**, and this app is often frozen.
+  An app without those entries is simply not offered for data backup, so implementing nothing
+  claims nothing.
+
+### The gate is split across the two languages, deliberately
+- **Dart stays authoritative.** `SkAutomation` owns the keys, the settings rows write them, and the
+  broadcast path is judged there, next to the export it is about to run.
+- **`SkAutomationGate.kt` mirrors it natively** for the provider, reading the *same*
+  `FlutterSharedPreferences` store with the same `flutter.`-prefixed keys and the same defaults —
+  the same values, not a second source of truth. It has to exist because a provider call must
+  answer inside the binder transaction, and booting a Flutter engine per `describe` would cost a
+  caller listing forty apps the better part of a minute. Both files carry a "change one, change the
+  other" note.
+- The service boots Dart headlessly on **its own channel and entrypoint** rather than sharing the
+  broadcast receiver's, so the path already proven on this phone is not disturbed to make room.
+
+### Three defects found while shipping it
+- **The data service now calls `startForeground` before any early return.** Once
+  `startForegroundService` has been invoked the platform requires the promotion whatever the
+  service then decides, so returning early on a stale job id **killed the process** with
+  `ForegroundServiceDidNotStartInTimeException` — a caller retrying would crash the app it was
+  backing up. A promotion the platform refuses is now answered and declined rather than pressed on
+  with, since a service it would not promote is one it may starve mid-write.
+- **A job refused because another is running no longer drops the foreground state.** The refusal
+  went through the same terminal path as a normal completion, which released the foreground the
+  *running* job depended on — on the one phone whose whole reason for the service is that it
+  starves background work. Foreground is now given up only when no job is left.
+- **An import awaits its writes and drains the preference channel before reporting success.**
+  Several writes on the restore path drop the Future `shared_preferences` hands back, and the
+  fork's own applier was fire-and-forget inside a `forEach`, which cannot await a callback at all.
+  Since a caller force-stops this app the instant it hears success — a `SIGKILL`, so that its
+  cached preferences cannot be written back over the import — anything still in flight was simply
+  lost, and the restore reported success over data that never arrived. **The same hole existed on
+  the hand-driven Export / Import panel**, which restarts the app immediately after an import; the
+  flush sits in the shared applier, so both paths are covered.
+
+### Packaging
+- `<queries>` names **both** sister-app callers. Without it a reply broadcast's `setPackage` fails
+  silently on Android 11+ — the export runs, writes correctly, and is never heard of — and the
+  caller check cannot read a signing certificate it cannot see, refusing a legitimate call as
+  "signature unreadable". This app already declares `QUERY_ALL_PACKAGES` for version tracking, so
+  the fault was latent rather than live; the declaration now rests on nothing.
+- Fork `versionCode` `23530004`, `versionName` `1.6.14+004`.
+
+## 1.6.14+001
 
 Base: upstream Obtainium **1.6.14** (`versionCode` 2353), fork `versionCode` `23530001`.
 

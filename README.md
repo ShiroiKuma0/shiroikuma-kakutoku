@@ -10,11 +10,12 @@ A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with **major additi
 upstream project while comparing it against **your own build of it** (releases *or* git commits),
 **waving through a push not worth rebuilding for**, **updating several apps at once**, a granular black-yellow 白い熊 獲得 UI theming page (colours,
 fonts, borders, sizes — all live-previewed), **category Export/Import** of the whole setup,
-**headless backup on demand** over a token-gated intent, and a tightened edge-to-edge main screen.
+**headless backup and restore** driven by a sister app whose identity is checked rather than
+trusted, and a tightened edge-to-edge main screen.
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.14+001`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.6.14+004`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -102,17 +103,32 @@ one ZIP per backup** (`shiroikuma-kakutoku_<yyyy-MM-dd_HH-mm-ss>.zip`, a `manife
 Round pill buttons — Cancel left, Import/Export right — and black-yellow result dialogs that close
 the whole chain on success.
 
-## 🤖 Headless backup on demand
-The app can back **itself** up with no Activity and no tapping: a companion automation app fires a
-token-gated broadcast, and 白い熊 獲得 writes the very same ZIP and answers with its absolute path,
-byte count, and human size. A master switch (**off** until you turn it on) and a copy-on-tap token
-sit right under the export rows; the token is generated on first sight, compared in constant time,
-and deliberately kept **out of the backup**. While it works the app reports **real counts, never a
-percentage** — `区分 3/5 — Sources`, `アプリ 128/240` — so a long export is legible from the
-outside. The requester may name the target directory, and the file it gets back is a perfectly
-ordinary backup you can restore from the Import button. A running export can also be **stopped from
-outside**, and a stopped one leaves the backup folder *exactly* as it found it — no short archive,
-no leftovers, and a terminal answer that proves the run ended rather than carrying on unseen.
+## 🤖 Headless backup — and restore — on demand
+The app can back **itself** up with no Activity and no tapping: a companion automation app asks, and
+白い熊 獲得 writes the very same ZIP and answers with its absolute path, byte count, and human size.
+The switch under the export rows is **on out of the box**, because the moment this matters most is a
+phone that has just been wiped, where nothing has been configured and nobody has pasted anything. An
+authorization token is still there for when you want one — a second switch turns it on and the
+copy-on-tap row appears — but it is an extra a caller may be asked for, not the gate, and one sent
+to an app that is not asking is ignored rather than refused. It is generated on first sight,
+compared in constant time, and deliberately kept **out of the backup**. While it works the app
+reports **real counts, never a percentage** — `区分 3/5 — Sources`, `アプリ 128/240` — so a long
+export is legible from the outside. A running export can be **stopped from outside**, and a stopped
+one leaves the backup folder *exactly* as it found it — no short archive, no leftovers, and a
+terminal answer that proves the run ended rather than carrying on unseen.
+
+## 🔐 A data door that checks who is knocking
+Backing an app up *with its data* needs something a broadcast cannot give you: **a broadcast cannot
+tell you who sent it.** So the restore half lives behind a `ContentProvider`, where the framework
+names the caller and this fork checks that name three ways — the **exact package** (never a prefix,
+which is not an identity: any sideloaded app may call itself `shiroikuma.anything`), the **uid the
+kernel reports**, and a **pinned signing certificate**. The archive itself moves through a file
+descriptor *the caller opens*, never a path, so the backup is encrypted and checksummed by the app
+that owns it instead of arriving as a foreign file inside someone else's archive. **Restore lives
+only here** — the broadcast side is exported without a permission, and an import there would let any
+app on the phone wipe this one. A companion can also read what this app would export, and whether it
+can read a given archive back, **without waking it up**: the answer is in the manifest, which is the
+only thing you can ask of an app that is currently frozen.
 
 ## 🔌 Silent installs through 白い熊 雫
 Obtainium's Shizuku installer, taught to work with **白い熊 雫** (`shiroikuma.shizuku`) directly.
