@@ -405,8 +405,18 @@ Future<Uint8List> skBuildExportZip({
 
 /// Reads one of our export files — the family ZIP, or a v1 single JSON — into
 /// the `{format, version, data}` shape [skApplyImport] consumes.
-Future<Map<String, dynamic>> skReadExportFile(String path) async {
-  final bytes = await File(path).readAsBytes();
+Future<Map<String, dynamic>> skReadExportFile(String path) async =>
+    skDecodeExportBytes(await File(path).readAsBytes());
+
+/// The same decode, from bytes that never touched the filesystem.
+///
+/// The 応用管理 data door hands this app an archive through a
+/// `ParcelFileDescriptor` the CALLER opened — never a path, because a backup is
+/// not a stable directory while it is being assembled, and a file this app
+/// dropped in itself would be neither encrypted nor checksummed by the caller
+/// that owns the archive. So the restore path has bytes and no file, and this
+/// is where they enter.
+Map<String, dynamic> skDecodeExportBytes(Uint8List bytes) {
   final isZip = bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B;
   if (!isZip) {
     final decoded = jsonDecode(utf8.decode(bytes));
@@ -431,18 +441,57 @@ Future<Map<String, dynamic>> skReadExportFile(String path) async {
   return {...manifest, 'data': data};
 }
 
-void _applyPref(SettingsProvider sp, String k, dynamic v) {
+/// Applies one imported preference, AWAITING the write.
+///
+/// The await matters because of what follows an import: the panel restarts the
+/// app and the automation data door is force-stopped the moment it reports
+/// success, so a write still in flight is a write that never happened. The
+/// String branch stays fire-and-forget because `setSettingString` is upstream's
+/// and also notifies listeners; [skFlushSettingsWrites] is what covers it, and
+/// everything else on this path that drops its Future.
+Future<void> _applyPref(SettingsProvider sp, String k, dynamic v) async {
   if (v is bool) {
-    sp.prefs?.setBool(k, v);
+    await sp.prefs?.setBool(k, v);
   } else if (v is int) {
-    sp.prefs?.setInt(k, v);
+    await sp.prefs?.setInt(k, v);
   } else if (v is double) {
-    sp.prefs?.setDouble(k, v);
+    await sp.prefs?.setDouble(k, v);
   } else if (v is List) {
-    sp.prefs?.setStringList(k, v.whereType<String>().toList());
+    await sp.prefs?.setStringList(k, v.whereType<String>().toList());
   } else if (v is String) {
     sp.setSettingString(k, v);
   }
+}
+
+/// Waits for every preference write an import issued to actually land.
+///
+/// **Both callers of [skApplyImport] are followed immediately by the process
+/// ending**: the Export/Import panel restarts the app, and 白い熊 応用管理
+/// force-stops it the instant the data door replies `OK` — a SIGKILL, not an
+/// orderly shutdown. Anything still in flight is simply lost, and a restore
+/// then reports success over data that never arrived, which is the one failure
+/// worse than a restore that refused.
+///
+/// Several writes on this path are fire-and-forget by construction and not ours
+/// to change: `SettingsProvider.setSettingString`, `SettingsProvider.setCategories`
+/// and `SkUiProvider.save()` all drop the Future `shared_preferences` hands
+/// them. So the flush is a final awaited round trip on the SAME channel — the
+/// platform handles one channel's messages in order and the Android side
+/// commits each write synchronously (`SharedPreferences.Editor.commit()`), so
+/// when this answers, everything sent before it is on disk. `reload()` rather
+/// than a dummy write because it also reads back what actually landed, leaving
+/// the in-memory cache agreeing with the file instead of with our intent.
+///
+/// The file writes on this path — the app JSONs and imported fonts — are
+/// already awaited, and their bytes survive a SIGKILL in the page cache; it is
+/// only the preference channel that needs draining.
+///
+/// Audited 2026-09-04: neither `SettingsProvider` nor `SkUiProvider` debounces
+/// its writes, so there is no timer to wait out first. **If one is ever added,
+/// it has to be awaited here** — a debounce means the store has not even been
+/// asked to write at the moment this returns.
+Future<void> skFlushSettingsWrites(SettingsProvider sp) async {
+  await sp.prefs?.reload();
 }
 
 /// Applies the selected categories from a decoded export. Absent categories
@@ -495,10 +544,13 @@ Future<String> skApplyImport({
       case SkExportCat.appSettings:
       case SkExportCat.creds:
         var n = 0;
-        (d as Map<String, dynamic>).forEach((k, v) {
-          _applyPref(settingsProvider, k, v);
+        // A `for` rather than `forEach`: the writes are awaited now, and
+        // `forEach` cannot await its callback — it would return with every
+        // write still outstanding, which is the bug this is here to prevent.
+        for (final e in (d as Map<String, dynamic>).entries) {
+          await _applyPref(settingsProvider, e.key, e.value);
           n++;
-        });
+        }
         parts.add('${cat.label}: $n');
       case SkExportCat.categories:
         final imported = (d as Map<String, dynamic>).map(
@@ -541,6 +593,8 @@ Future<String> skApplyImport({
         parts.add('${cat.label}: knobs + $nFonts font(s)');
     }
   }
+  // Written is not landed. Nobody is told this succeeded until it has.
+  await skFlushSettingsWrites(settingsProvider);
   return parts.isEmpty ? 'nothing imported' : parts.join('\n');
 }
 

@@ -90,6 +90,38 @@
                 <action android:name="${applicationId}.action.CANCEL_EXPORT" />
             </intent-filter>
         </receiver>
+        <!-- shiroikuma-kakutoku fork, contract v2 §2a: the data door.
+             The receiver above is the UNAUTHENTICATED half of the surface —
+             it only ever writes where it was told to and reports what it did.
+             Everything that moves data through a caller-supplied descriptor
+             lives here instead, because a broadcast cannot tell you who sent
+             it and this can: AutomationCallers checks the caller's exact
+             package name, cross-checks the uid the kernel reports, and pins
+             its signing certificate. No android:permission — a custom one
+             would have to be `normal` (any app may hold it) or `signature`
+             (impossible: every app in this family has its own keystore). -->
+        <provider
+            android:name=".automation.AutomationProvider"
+            android:authorities="${applicationId}.automation"
+            android:exported="true" />
+        <!-- Not exported: a caller reaches it only through the provider. -->
+        <service
+            android:name=".automation.AutomationDataService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Automation data export/import" />
+        </service>
+        <!-- Capability discovery, readable WITHOUT waking this app: 応用管理
+             builds its list across every installed package at once and must
+             answer "can this app be backed up" for one that is currently
+             frozen, which 白い熊 does a lot — a frozen app cannot be asked
+             anything. `format` is skExportVersion (the family ZIP) and
+             `min_format` the oldest archive skReadExportFile still decodes. -->
+        <meta-data android:name="shiroikuma.automation.contract"   android:value="2" />
+        <meta-data android:name="shiroikuma.automation.format"     android:value="2" />
+        <meta-data android:name="shiroikuma.automation.min_format" android:value="1" />
         <meta-data
             android:name="dev.imranr.obtainium.service.NOTIFICATION_ICON"
             android:resource="@drawable/ic_notification" />
@@ -128,6 +160,9 @@
     <uses-permission android:name="af.shizuku.plus.permission.API_V23" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- shiroikuma-kakutoku fork: goes with AutomationDataService's
+         foregroundServiceType="specialUse" (required from API 34). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
@@ -139,5 +174,18 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- shiroikuma-kakutoku fork, contract v2 §4: BOTH callers, and the
+             second one is the one that has actually been calling. Without a
+             package here, a reply broadcast's setPackage fails SILENTLY on
+             Android 11+ — the export runs, writes correctly, and is never
+             heard of — and the data door's caller check cannot read the
+             caller's signing certificate either, so a legitimate call is
+             refused as "signature unreadable" rather than merely losing its
+             reply. 応用管理 drives the data door of §2a; 自由作業盤 drives the
+             保存復元 batch of §1. QUERY_ALL_PACKAGES above already grants the
+             visibility; these are declared anyway so it does not depend on a
+             permission that could be dropped. -->
+        <package android:name="shiroikuma.oyokanri" />
+        <package android:name="shiroikuma.jiyusagyoban" />
     </queries>
 </manifest>
