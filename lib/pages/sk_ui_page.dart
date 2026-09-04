@@ -30,9 +30,12 @@ class _SkUiPageState extends State<SkUiPage> {
   // queried when the page opens (and re-queried after folder changes).
   SkExportStatus? _exStatus;
 
-  // 保存復元 automation: the gate 白い熊 opens by hand, and the token sister-app
-  // tasks must present. Nothing is reachable until the switch is on.
-  bool _automationOn = false;
+  // 保存復元 automation (contract v2): the switch ships ON, and the token is an
+  // extra a caller may be asked for rather than the gate. A pasted secret
+  // cannot survive a wipe, and the case this serves is 応用管理 restoring apps
+  // and their data onto a clean phone where nothing has been configured.
+  bool _automationOn = true;
+  bool _automationRequireToken = false;
   String _automationToken = '';
   bool _allFilesAccess = false;
 
@@ -43,7 +46,11 @@ class _SkUiPageState extends State<SkUiPage> {
     final prefs = context.read<SettingsProvider>().prefs;
     if (prefs != null) {
       _automationOn = SkAutomation.isEnabled(prefs);
-      _automationToken = SkAutomation.token(prefs);
+      _automationRequireToken = SkAutomation.requiresToken(prefs);
+      // Read (and so generate) the token only when it is actually being asked
+      // for: a 48-character secret written into prefs to sit under an off
+      // switch is a secret nobody needs.
+      if (_automationRequireToken) _automationToken = SkAutomation.token(prefs);
     }
     _refreshAllFilesAccess();
   }
@@ -74,6 +81,21 @@ class _SkUiPageState extends State<SkUiPage> {
       // Denied or unavailable — the fallback still produces a backup.
     }
     await _refreshAllFilesAccess();
+  }
+
+  Future<void> _setRequireToken(bool value) async {
+    final prefs = context.read<SettingsProvider>().prefs;
+    if (prefs == null) return;
+    await SkAutomation.setRequireToken(prefs, value);
+    if (!mounted) return;
+    setState(() {
+      _automationRequireToken = value;
+      // Generated on first read, which is now — the row below is about to be
+      // shown and must have something to abbreviate.
+      if (value && _automationToken.isEmpty) {
+        _automationToken = SkAutomation.token(prefs);
+      }
+    });
   }
 
   Future<void> _copyToken() async {
@@ -300,8 +322,9 @@ class _SkUiPageState extends State<SkUiPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Sister-app tasks may trigger this app’s export with the '
-                  'token-gated intent.',
+                  'Sister apps may trigger this app’s export — and 白い熊 '
+                  '応用管理 may back its data up and put it back on a wiped '
+                  'phone.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.primary,
                   ),
@@ -317,24 +340,45 @@ class _SkUiPageState extends State<SkUiPage> {
               ],
             ),
           ),
-          SkRow(
-            label: 'Automation token',
+          SkSwitchRow(
+            label: 'Use authorization token?',
             level: 1,
-            below: Text(
-              _automationToken.isEmpty
-                  ? '…'
-                  : '${SkAutomation.abbreviate(_automationToken)} — tap to copy',
+            value: _automationRequireToken,
+            onChanged: _setRequireToken,
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(skIndent(1), 0, 14, 4),
+            child: Text(
+              'Off: any sister app may drive the automation. On: a caller must '
+              'also present the token below. Either way, the data door checks '
+              'the caller’s package, uid and signing certificate.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.primary,
-                fontWeight: FontWeight.bold,
               ),
             ),
-            trailing: TextButton(
-              onPressed: _regenerateToken,
-              child: const Text('Regenerate'),
-            ),
-            onTap: _copyToken,
           ),
+          // Shown only when the token is being asked for: a 48-character
+          // secret sitting under an off switch invites pasting it somewhere it
+          // will do nothing.
+          if (_automationRequireToken)
+            SkRow(
+              label: 'Automation token',
+              level: 1,
+              below: Text(
+                _automationToken.isEmpty
+                    ? '…'
+                    : '${SkAutomation.abbreviate(_automationToken)} — tap to copy',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              trailing: TextButton(
+                onPressed: _regenerateToken,
+                child: const Text('Regenerate'),
+              ),
+              onTap: _copyToken,
+            ),
 
           // ---- General ----
           const SkSectionHeading('General'),
