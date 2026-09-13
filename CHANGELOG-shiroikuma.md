@@ -3,7 +3,61 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.14+004 — current
+## 1.6.15+001 — current
+
+Base: upstream Obtainium **1.6.15** (`versionCode` 2354), fork `versionCode` `23540001`.
+
+Forty-three commits replayed against four conflicts, all of them the fork's brand meeting an
+upstream rewording rather than a disagreement about behaviour. Three were translations — `hu.json`
+tightening one phrase in the Google-verification warning, `ja.json` recasting the battery note and
+two more strings, and `tr.json`, where upstream rewrote the Turkish translation top to bottom, so
+the whole file conflicted at once — and the fourth was `README.md`, where upstream's "temporarily
+remove banner" landed inside the block the fork README replaces outright.
+
+### Rebranding is a rule, so it was re-run rather than re-typed
+- **The fork's translation change is exactly one substitution** — `Obtainium` → `白い熊 獲得` in
+  values only, keys untouched. Before trusting that description, it was checked: applying the
+  substitution to every one of the previous base's 29 locales reproduces the fork's files
+  byte-for-byte (`en.json` differs only by the feature strings later commits add).
+- **So each conflicted file is upstream's new text with the rule applied**, not a hand merge of
+  two versions of a 960-line file. Upstream's rewording is kept in full; only the brand is ours.
+
+### Eight files both sides touch, all merged textually, each read back
+- **The WorkManager task is now cancelled when background checks are disabled** (#3272) and
+  re-registered — with the `update` policy, not `keep` — when the interval changes; a
+  settings-provider listener drives it. The whole mechanism sits directly beside the fork's
+  self-tracking block in `main.dart`, and its five pieces (handle, last-synced interval, sync,
+  listener, `dispose` unhook) are all present and identical to upstream's, offset by our lines.
+- **The auto-export skip is logged** (#3227) when the export-directory grant has been revoked.
+  It landed in the `exportDir == null` branch above the fork's one-ZIP export path, which is the
+  only place it can mean anything.
+- **The root installer is additive**: a new `InstallerMode.root`, a `RootInstaller`, and a
+  permission check on selection that falls back to the system installer with a
+  `rootNotGranted` error. `settings_provider.dart`, `settings.dart` and
+  `apps_provider_install.dart` each gained a branch; none of the fork's hunks moved.
+- **The export-directory picker is checked before it is opened** (some TV boxes have nothing
+  that handles `ACTION_OPEN_DOCUMENT_TREE`), and releasing a stale grant is best-effort.
+- **GitHub's certificate-pinning fix** (#3263) adds the ISRG roots to the pinned set, since
+  release-asset downloads redirect to `release-assets.githubusercontent.com`; it merged clear of
+  the fork's five call sites, whose only upstream change is a docs link and a proxy hint.
+- **TV clearance and focus** in `apps.dart` — 160 px at the bottom of the list on TV, and the add
+  button no longer auto-focuses — landed around, not in, the fork's ordering and update code.
+
+### The rest of upstream's 1.6.15
+- **Root as an install method**, with the same "pretend to be Google Play" option Shizuku has.
+- **Search for RuStore and Huawei AppGallery.**
+- **The zip APK filter is exposed** for Direct APK Link and HTML sources (#3278).
+- **Redirecting source URLs are corrected to their destination**, and track-only sources carry
+  a note saying so (#3276).
+- **The log viewer's dead share action on TV is a copy-to-clipboard** (#3235); the category-delete
+  warning is singular; `hu`, `ja`, `pl` and `tr` translations updated.
+
+`v1.6.16` was tagged the same day this was built, as a pre-release. It is held: it moves the
+Flutter pin to 3.47.4, restructures `source_provider.dart` into a `services/` layer and rewrites
+the version logic the fork's linked-version and commit-following code sits on — a port, not a
+rebase, and one for when upstream calls it stable.
+
+## 1.6.14+004
 
 Base: upstream Obtainium **1.6.14** (`versionCode` 2353), fork `versionCode` `23530004`.
 
