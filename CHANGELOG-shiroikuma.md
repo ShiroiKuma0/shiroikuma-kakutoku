@@ -3,7 +3,116 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.15+001 — current
+## 1.6.17+001 — current
+
+Base: upstream Obtainium **1.6.17** (`versionCode` 2356), fork `versionCode` `23560001`.
+
+Two upstream releases in one step. `v1.6.16` is the restructuring that was held last time — 122
+commits, 144 files, `source_provider.dart` cut from 1 897 lines to 370 — and `v1.6.17` is the
+same-day follow-up that restores the track-only pseudo-version controls the restructuring had
+dropped from the app page. All forty-five fork commits replayed, with nine stops touching 28 files.
+
+### Translations: the rule again, not a hand merge
+- **Twenty-six locales conflicted with the rebranding.** As before, the fork's translation change
+  is one substitution — `Obtainium` → `白い熊 獲得` in values, keys untouched — and it was checked
+  against every locale of the previous base before being trusted (31 of 32 reproduce byte-for-byte;
+  `en.json` differs only by the fork's own feature strings). Each conflicted file is therefore
+  upstream's new text with the rule re-applied.
+- **`en.json` kept both sides at each of its two stops**: upstream's new strings (list density,
+  signing-certificate mismatches, Uptodown errors, `refresh`, `logsCleared`) and the fork's
+  (linked-app notes, `rebuildToUpdate…`, `setAsUpdated…`, `trackCommits…`, `updateOnlyIfNewer`).
+
+### Relocations — the fork's provider hunks follow upstream's split
+- **`enforceTrackOnlyFor()`**, the per-app track-only rule GitHub's commit following overrides,
+  now lives on `AppSource` in `app_sources/app_source.dart`, next to the `enforceTrackOnly` flag it
+  refines; `SourceProvider.getApp()` still consults it.
+- **The linked-package form rows** (`linkedInstalledPackage`, `linkedVersionStripRegEx`,
+  `updateOnlyIfNewer`) and **the title-first reordering** of the options form moved with the
+  common rows into `app_source.dart`.
+- **The `skIsOutdated()` guard** sits at the top of `isAppUpdateable()` in
+  `services/version_service.dart`, where upstream's rolling-tag and numeric-comparison logic now
+  lives — so the fork's rules (build-variant suffixes, set-as-updated, commit identity, the
+  linked-package "only if newer" gate) still govern every call site upstream routes through it.
+
+### Re-placed inside upstream's extracted helpers
+- **Settings**: the 白い熊 獲得 UI row goes into `_buildLandingList()`; the wiki link and swatch
+  label as before.
+- **Add app**: upstream's `_buildUrlRow()` loses its bare "+" again and the fork's labelled
+  full-width button sits below it; `_withLinkedAppPicker()` wraps the options form unchanged.
+- **Form renderer**: the `excludes` release and the `disabledBy` inertness went into upstream's
+  new `_buildItem()`; the field-fill and card-run logic merged on its own.
+- **App page**: `appsProvider` became a state field upstream, so `_getPrimaryButton()` lost its
+  argument at all three fork call sites; the options page keeps the fork's `StatefulBuilder` and
+  picker but takes upstream's restored back arrow; the version block is the fork's, so upstream's
+  new `_installedVersionLabel()` was dropped as dead; the download-size probe runs from upstream's
+  post-frame callback with the fork's "only when outdated" condition; the icon tap opens the
+  linked package inside upstream's `TvFocusRing`; the fork's `Stack` with the running line keeps
+  upstream's four-argument `_buildSourceInfoSections()`.
+- **App list tile**: the linked gate on the update button and the wider version label
+  (`maxWidth / 2, 260`) inside upstream's TV `ExcludeFocus` branches.
+- **Lifecycle**: `getCorrectedInstallStatusAppIfPossible()` is upstream's `reconcileInstallStatus()`
+  now, keeping the fork's `linkedInfo` parameter and linked short-circuit at both call sites.
+- **Icon cache**: upstream now refreshes a cached icon when the package it came from is updated
+  (#3306); the fork keys that staleness check on `skIconSource()` — the linked local build for a
+  linked entry — so a rebuilt fork APK refreshes its entry's icon too.
+- **Update checks**: the fork's `_isReportableUpdate()` gate stays; upstream removed the inline
+  TLS-handshake retry (it lives in the per-app error path now), and the fork's second copy of the
+  gate went with it.
+- **`main.dart`**: the knob-driven theme keeps precedence and upstream's `isTV` argument is passed
+  to `buildObtainiumTheme()` on the stock branch.
+
+### Two things the replay could not see, both caught by the analyzer
+- **`trailing` / `trailingKey` restored on `GeneratedFormTextField`.** Upstream removed them as
+  dead code; the fork's linked-app picker button is built on them (the trailing widget replaces
+  the help icon, and a moved `trailingKey` re-initialises the field, which is how a picked value
+  reaches the text controller). Back in the model and the two renderer lines that consume them.
+- **The six `sk_*` files moved to `material_ui`.** Upstream migrated every file under `lib/` from
+  `flutter/material` to `material_ui`, a full fork of the material library with its own
+  `ThemeData` and `MaterialApp`; `buildSkTheme()` was returning the other library's `ThemeData`,
+  which `MaterialApp` cannot take, and the UI page's widgets would have looked up a `Theme` that
+  is not in the tree. Same import swap upstream made everywhere else.
+
+### Toolchain
+- **Gradle 9.1 → 9.4.1, AGP 9.0.1 → 9.2.1, `android.builtInKotlin=true`** (the legacy Kotlin
+  Gradle plugin is gone); `dynamic_system_colors` → `dynamic_color` + `material_ui`; the
+  unmaintained `android_system_font` and `shizuku_apk_installer` plugins move to upstream's own
+  forks. Upstream's Flutter pin is 3.47.4; the fork still builds on 3.47.1 (the declared floor is
+  unchanged at 3.44). Remaining `dart format` differences are drift between those two formatter
+  versions, on upstream's lines as much as ours, and were left alone.
+- **`MainActivity.kt`** grew 226 upstream lines (installer result detection); the fork's
+  `SK_CHANNEL` restart handler merged beside them. The `automation/` package and the
+  `StateExportReceiver` are untouched.
+
+### The rest of upstream's 1.6.16 and 1.6.17
+- **APK signing certificates are verified before installing** (#2922), with a distinct error for a
+  hash you configured versus one that merely differs from the installed app.
+- **External-installer completion is detected from the installer's own result** (#3091), and every
+  installable container type is recognised.
+- **Split APKs**: several split URLs in one `apkUrls` entry, RuStore split resolution via a
+  device-profile request, summed split sizes in the size probe, a specific error for RuStore's
+  external-source listings (#3298).
+- **Minimum update age** is honoured when adding apps and by list-based sources, with the
+  suppression bugs fixed (#3303).
+- **Rolling version tags show updates**, and version detection, GitLab APK assets, app-directory
+  recovery and the AGP build are fixed (#3215, #2732, #2860, #3188).
+- **Networking**: retries on 429/5xx and transient failures, resumed truncated downloads, per-hop
+  redirect clients, no header leakage across redirects, no leaked HTTP clients.
+- **App list**: a density setting (#2620), stable sort for equal keys, cancelling a download from
+  the list, bulk-install scope and stale-filter fixes, cached icons refreshed on update.
+- **Android TV**: full D-pad navigability, focus rings, back navigation on pushed pages, minimum
+  text-button height, selection-dialog actions on one row.
+- **Sources**: Uptodown downloads via its API plus search; APKMirror release pages, changelogs,
+  sizes and package IDs; Huawei AppGallery `.ru`; HTML sources discover URLs in parsed attributes
+  and handle relative and quoted links; F-Droid search URLs canonicalised; the ForgeJo token is
+  persisted globally and the GitHub-only settings are dropped (#2788); real GitHub auth errors
+  surface instead of being swallowed.
+- **Import/export**: confirmation before an import overwrites, credentials stripped from exports,
+  bytes-only file imports, filter-aware selection, imported settings clamped, welcome-dialog
+  dismissal persisted.
+- **Repo**: emulator end-to-end suites with a local runner, `CONTRIBUTING.md`, new issue
+  templates; `bs`, `hu`, `ja`, `pl`, `ru`, `zh` translations updated.
+
+## 1.6.15+001
 
 Base: upstream Obtainium **1.6.15** (`versionCode` 2354), fork `versionCode` `23540001`.
 
