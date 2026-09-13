@@ -231,7 +231,8 @@ class _GeneratedFormState extends State<GeneratedForm> {
           decoration: _fieldDecoration(
             labelText: tr(formItem.label) + (formItem.required ? ' *' : ''),
             hintText: formItem.hint,
-            suffixIcon: _buildHelpSuffixIcon(formItem.helpUrl),
+            suffixIcon:
+                formItem.trailing ?? _buildHelpSuffixIcon(formItem.helpUrl),
           ),
           minLines: formItem.max <= 1 ? null : formItem.max,
           maxLines: formItem.max <= 1 ? 1 : formItem.max,
@@ -339,7 +340,17 @@ class _GeneratedFormState extends State<GeneratedForm> {
   /// field controllers must be re-initialized after a widget update.
   int _itemsSignature(List<List<GeneratedFormItem>> items) {
     return Object.hashAll(
-      items.expand((row) => row.map((e) => Object.hash(e.key, e.runtimeType))),
+      items.expand(
+        (row) => row.map(
+          (e) => Object.hash(
+            e.key,
+            e.runtimeType,
+            // Fork: a moved trailingKey re-initialises the field (see
+            // GeneratedFormTextField.trailingKey).
+            e is GeneratedFormTextField ? e.trailingKey : null,
+          ),
+        ),
+      ),
     );
   }
 

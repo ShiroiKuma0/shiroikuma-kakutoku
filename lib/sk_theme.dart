@@ -2,7 +2,7 @@
 // SkUiKnobs — black-yellow by default, every attribute driven by the knobs
 // so edits on the UI page restyle the whole app instantly.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:obtainium/providers/sk_ui_provider.dart';
 
 FontWeight skFontWeight(double w) =>

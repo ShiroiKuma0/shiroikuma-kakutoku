@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart';
+
 abstract class GeneratedFormItem {
   late String key;
   late String label;
@@ -22,6 +24,13 @@ class GeneratedFormTextField extends GeneratedFormItem {
   final List<String>? autoCompleteOptions;
   final String? helpUrl;
 
+  /// Fork: a widget shown at the end of the field in place of the help icon
+  /// (the linked-app picker button). [trailingKey] takes part in the form's
+  /// structure signature, so changing it re-initialises the field — which is
+  /// how a value chosen in the picker reaches the text controller.
+  final Widget? trailing;
+  final String? trailingKey;
+
   GeneratedFormTextField(
     super.key, {
     super.label,
@@ -33,6 +42,8 @@ class GeneratedFormTextField extends GeneratedFormItem {
     this.password = false,
     this.autoCompleteOptions,
     this.helpUrl,
+    this.trailing,
+    this.trailingKey,
   });
 
   @override
@@ -53,6 +64,8 @@ class GeneratedFormTextField extends GeneratedFormItem {
       password: password,
       autoCompleteOptions: autoCompleteOptions,
       helpUrl: helpUrl,
+      trailing: trailing,
+      trailingKey: trailingKey,
     );
   }
 }
