@@ -3,7 +3,86 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.6.17+001 — current
+## 1.7.4+001 — current
+
+Base: upstream Obtainium **1.7.4** (`versionCode` 2362), fork `versionCode` `23620001`.
+
+Two things at once: the black-yellow theme applied in full, and the jump from 1.6.17 to 1.7.4.
+Build `1.6.17+002` carried the theme alone and was never released; this is its first release.
+
+### The theme, in full
+- **Every colour is a role of its own.** About 170 roles in 22 sections
+  (`lib/providers/sk_roles.dart`) replace the twelve colour slots: each kind of text, frame,
+  ground, icon, divider and control state. The twelve old slots live on as the foundation colours
+  the roles start from, so an existing setup keeps its look.
+- **Each role is set where its item lives** — Buttons, Dialogs, Switches, Marks, Menus, Lists,
+  Fields, Bars, Panels, Chips, Progress, Messages, Icons, Text — as a swatch row with a reset
+  beside it. **Reset all colours** sits under Maintenance.
+- **`#FFFF00` and `#000000` are written once**, as the defaults of the role table.
+- **Every button is an outlined pill**, never filled: 3 dp and bold for the main action of a
+  block, 1.25 dp for the rest, the delete red on frame and label of what deletes. Floating buttons
+  are outlined rings. The accent fill of the Add button is gone.
+- **Dialog buttons are pills**, and the main one is picked by itself, with no change at any of
+  upstream's call sites.
+- **The switch is an outlined pill with a solid dot** — right and accent when on, left and dim
+  yellow when off — everywhere, switch rows of lists included.
+- **Icons are coloured by what their row does** in lists, sheets and Settings: call, message,
+  contact, share, view, block, delete.
+- **The update mark on an app's icon is a ring** in a role colour.
+- **The UI page is rebuilt**: an **App settings** pill on top, an index of chips — one per
+  section; a tap unfolds and scrolls to it, a long-press drags it and reorders the sections — and
+  every section folding, folded by default. Action rows are pills that hug their label, explained
+  rows carry a dim-gold note with a left rule, and every row has an icon as tall as its label.
+  **Reset section order** and **Reset everything** join Maintenance.
+- **Section order and fold state are stored with the knobs** and travel in the export.
+- **With “Use 白い熊 獲得 UI” off**, the page shows Export / Import, General and Maintenance only,
+  and the app wears upstream's look.
+- **The launch and window backgrounds are black**, so no white flash precedes the first frame.
+- **“Folder” is “directory”** in the UI page and the Export / Import panel.
+
+### How the theme reaches upstream's screens
+- **The mixed way.** Upstream's screens keep reading `Theme.of(context)`; `lib/sk_theme.dart`
+  builds the whole `ThemeData` — colour scheme and every component theme — from the roles. Fork
+  screens read `SkPalette`, which rides on the theme as an extension.
+- **One import barrel.** Every screen imports `lib/sk_material.dart` in place of `material_ui`. It
+  re-exports the library and swaps in the fork's `AlertDialog`, `Switch` and `SwitchListTile`
+  (`lib/components/sk_dropins.dart`), so no call site of upstream's is edited.
+- **Tests**: `test/sk_ui_test.dart`, twenty tests over the role defaults, the theme, the dialogs
+  and the real UI page.
+
+### Onto upstream 1.7.4 — one fork-layer commit
+- **`custom` is now a single commit on the `v1.7.4` tag.** A commit-by-commit replay conflicted
+  in 29 files at the second of 49 commits, so the difference was resolved once and landed as one
+  layer. The 49 earlier commits stay reachable under the tag `custom-1.6.17`.
+- **The per-app options page moved** to `lib/pages/app_additional_options.dart` upstream. Ported
+  into it: the installed-app picker, the title prefilled with the one shown, the **Save changes**
+  button, the set-as-updated carry-over across an edit, an unchanged title stored as empty, and
+  “linking implies track-only”.
+- **The linked-entry fields** (`linkedInstalledPackage`, `linkedVersionStripRegEx`,
+  `updateOnlyIfNewer`) sit in upstream's new **App options** group, after track-only; the
+  title-first order is kept.
+- **A tap on the app icon opens the app**, as upstream now does in place of a double tap; a linked
+  entry still opens the local build.
+- **Form model and renderer** keep both sides: the fork's `trailing`, `excludes` and `disabledBy`
+  beside upstream's `suffixIcon` and `mutuallyExclusiveWith`.
+- **GitHub**: upstream's `includeDrafts` joins the fork's commit following.
+- **The download-size probe** runs for an entry that is not installed or is outdated by the
+  fork's own rule (`skIsOutdated`).
+- **Translations rebuilt by the rule** from upstream's 1.7.4 files, Bengali and Greek included.
+  Upstream's new shape test wants every key of `en.json` in every locale, so the fork's 27 keys
+  are now present in all of them, in English.
+- **New upstream screens on the barrel**: update health, pinned certificates and the pin-set
+  editor (its delete button a red pill), the dynamic-code-loading warning, the options page.
+- **APKCombo is gone**, as upstream removed the source.
+- **The APK grows from 27 MB to 47 MB** with upstream's embedded Cronet.
+
+### Checks
+- `flutter analyze`: no issues. `flutter test`: 507 pass, upstream's 372 new ones among them.
+- Merged without a textual conflict and only compile-checked together: the concurrent install
+  queue beside upstream's bounded install waits and installer backends, and the export directory
+  beside upstream's persisted read access.
+
+## 1.6.17+001
 
 Base: upstream Obtainium **1.6.17** (`versionCode` 2356), fork `versionCode` `23560001`.
 

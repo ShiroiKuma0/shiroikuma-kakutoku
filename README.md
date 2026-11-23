@@ -8,14 +8,14 @@
 
 A fork of [Obtainium](https://github.com/ImranR98/Obtainium) with **major additions**: tracking an
 upstream project while comparing it against **your own build of it** (releases *or* git commits),
-**waving through a push not worth rebuilding for**, **updating several apps at once**, a granular black-yellow 白い熊 獲得 UI theming page (colours,
-fonts, borders, sizes — all live-previewed), **category Export/Import** of the whole setup,
+**waving through a push not worth rebuilding for**, **updating several apps at once**, a black-yellow theme in which **every item has a colour of its own**, set on a folding 白い熊 獲得 UI
+page (colours, fonts, borders, sizes — all live-previewed), **category Export/Import** of the whole setup,
 **headless backup and restore** driven by a sister app whose identity is checked rather than
 trusted, and a tightened edge-to-edge main screen.
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.6.17+001`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.7.4+001`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -86,18 +86,20 @@ instant its own download lands, apps waiting their turn read **`Queued`**, and t
 never be started twice by a double tap, a swipe, or a bulk run overlapping a single one. A
 self-update still goes last and alone.
 
-## 🎨 白い熊 獲得 UI — granular theming page
+## 🎨 白い熊 獲得 UI — one page, folded by section
 A dedicated theming screen in the sister-repo house style, reached from the top of Settings **or by
-long-pressing the Settings cog** on the main screen. Bold headings underlined exactly as wide as
-their text, hairline section spacers, deeply indented rows, and tight spacing so the hierarchy reads
-instantly. **Everything previews live** — the whole app (and the page itself) restyles as you drag.
-One-tap reset to the black-yellow defaults.
+long-pressing the Settings cog** on the main screen. A thick **App settings** pill leads it, then an
+index of small chips — one per section. Tap a chip and its section unfolds and scrolls into view;
+**long-press and drag** a chip and the sections reorder to match. Every section folds, and the fold
+state and the order are remembered and travel in the export. Rows that do something are pills that
+hug their label, rows that set something stay plain, and every row carries an icon coloured by what
+it does. **Everything previews live** — the whole app, and the page itself, restyles as you drag.
 
 ## 📦 Category Export / Import
 The first section of the UI page backs up **everything** by category — **Sources (tracked apps)
 first**, then app settings, source credentials, categories, and the 白い熊 獲得 UI itself (knobs,
 recent colours, and your imported font files ride along inside the export). A settable export
-folder is checked on opening for the latest export (loud red warning until one is set); **exactly
+directory is checked on opening for the latest export (loud red warning until one is set); **exactly
 one ZIP per backup** (`shiroikuma-kakutoku_<yyyy-MM-dd_HH-mm-ss>.zip`, a `manifest.json` plus one
 `<category>.json` inside); import **merges, never wipes**, and offers an in-place app restart.
 Round pill buttons — Cancel left, Import/Export right — and black-yellow result dialogs that close
@@ -114,7 +116,7 @@ to an app that is not asking is ignored rather than refused. It is generated on 
 compared in constant time, and deliberately kept **out of the backup**. While it works the app
 reports **real counts, never a percentage** — `区分 3/5 — Sources`, `アプリ 128/240` — so a long
 export is legible from the outside. A running export can be **stopped from outside**, and a stopped
-one leaves the backup folder *exactly* as it found it — no short archive, no leftovers, and a
+one leaves the backup directory *exactly* as it found it — no short archive, no leftovers, and a
 terminal answer that proves the run ended rather than carrying on unseen.
 
 ## 🔐 A data door that checks who is knocking
@@ -139,11 +141,22 @@ actually lands instead of failing silently. The classic name is kept alongside i
 stock-Shizuku fallback, so one build works against either server with no compatibility stub in
 between.
 
-## 🌈 RGBA colour pickers with preset boxes
-Twelve colour slots (background, surface, text, secondary text, accent, borders, icons, top bar,
-action buttons). Each picker has **four R/G/B/A sliders (0–255)**, an old→new preview with a
-checkerboard behind translucent colours, and a row of **one-click recent-colour boxes** — shared
-across every picker, persisted, and prefilled with the house palette.
+## 🌈 Every item its own colour
+Some 170 **colour roles** in place of a dozen slots: the text, the frame and the ground of a button
+are three of them; so are a dialog's title, body and ground, a switch's outline and dot, on and off,
+a list's first and second line, the bars, the fields, the chips, the progress line. Each is set in
+the section its item belongs to — Buttons, Dialogs, Switches, Menus, Lists, Text, Bars — with a
+reset beside it, and **Reset all colours** under Maintenance. Each picker has **four R/G/B/A sliders
+(0–255)**, an old→new preview with a checkerboard behind translucent colours, and a row of
+**one-click recent-colour boxes** shared across every picker.
+
+## 💊 Pills, never filled
+Every button is an **outlined pill**: a thick 3 dp frame and bold label for the main action of a
+block, a thin 1.25 dp frame for every other, and the delete red on frame and label of whatever
+deletes. Dialog buttons follow the same rule, floating buttons are outlined rings, and a **switch**
+is an outlined pill too, with a solid dot — right and yellow when on, left and dim when off. An
+action with nothing to do fades, rather than sitting there in full yellow looking like work waiting
+to be done.
 
 ## 🔤 External fonts, rendered in their own glyphs
 Import any `.ttf`/`.otf` and the app loads it as a selectable family. The font list draws **each
@@ -152,16 +165,14 @@ default, the system font, and monospace. Pick, apply, delete — all persisted.
 
 ## 📏 Size & shape sliders — everything to zero
 Font size, font weight, **corner roundness (0–32 dp)**, **border thickness (0–6 dp, 0 = none)**, icon
-size, and row density are all sliders with an inline live preview. Borders and roundness go all the
-way to flat.
+size, and row density are all sliders with an inline live preview.
 
 ## ⬛🟨 Black-yellow by default
-Pure yellow `#FFFF00` on black `#000000` (never the muddy material yellow) out of the box — text,
-borders, and icons in yellow, and **action buttons (Add, Update, per-app download) as black fill with
-yellow text and a yellow border**. On such a button the fill is the page's own black, so the label
-and the border are the whole button — and **an action with nothing to do fades both**, rather than
-sitting there in full yellow looking like work waiting to be done. The knob-driven theme covers the
-whole app: app bars, cards, dialogs, inputs, switches, sliders, the FAB, search bar, and menus.
+Pure yellow `#FFFF00` on black `#000000` (never the muddy material yellow) out of the box. The two
+primaries are only the defaults — written once, and every role that starts from them can be moved.
+Colours that carry meaning keep theirs: green for what calls or runs, blue for what messages, orange
+for what shares, red for what deletes. One switch, **Use 白い熊 獲得 UI**, hands the whole look back
+to stock.
 
 ## 📱 Tightened main screen
 A compact app bar (no tall expanding header), full-width content with no dead side margins, and app
@@ -170,9 +181,7 @@ per-app buttons and the selection menu already do the job — and can be switche
 
 ## 🩸 A removal dialog that reads like one
 The confirm button says **Remove**, not "Continue", and sits at the far left with Cancel at the far
-right, so the destructive action is nowhere near the reflex tap. Dark blood red `#8B0000` in fill
-and border with a white label — **both colours settable in Settings** — while Cancel carries the
-accent border filled buttons wear in this theme.
+right, so the destructive action is nowhere near the reflex tap. Dark blood red `#8B0000` by default, with **both of its colours settable in Settings**.
 
 ---
 
