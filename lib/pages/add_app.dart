@@ -1,10 +1,11 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/components/category_editor.dart';
+import 'package:obtainium/components/sk_installed_app_picker.dart';
 import 'package:obtainium/app_sources/samsunggalaxystore.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/pages/app.dart';
@@ -12,6 +13,7 @@ import 'package:obtainium/pages/import_export.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/theme.dart';
 import 'package:obtainium/utils/nav_helper.dart';
@@ -50,6 +52,10 @@ class AddAppPageState extends State<AddAppPage> {
   bool inferAppIdIfOptional = true;
   List<String> pickedCategories = [];
   int urlInputKey = 0;
+
+  /// Fork: bumped after picking a linked app, so the options form re-reads the
+  /// new value (GeneratedForm re-initialises when an item's trailingKey moves).
+  int linkedPickerRevision = 0;
   late final SourceProvider sourceProvider;
 
   Future<String?>? _sourceNoteFuture;
@@ -683,6 +689,51 @@ class AddAppPageState extends State<AddAppPage> {
     );
   }
 
+  /// Fork: gives the "compare against installed app" row the same affordances
+  /// as the edit-an-existing-app screen — a picker button and a typeahead over
+  /// installed packages, instead of a bare package-name field.
+  List<List<GeneratedFormItem>> _withLinkedAppPicker(
+    List<List<GeneratedFormItem>> rows,
+  ) {
+    final List<String> packageOptions =
+        skInstalledPackages
+            .where((p) => p.packageName != null && skIsUserApp(p))
+            .map((p) => p.packageName!)
+            .toList()
+          ..sort();
+    return rows.map((row) {
+      return row.map((e) {
+        if (e.key != skLinkedPackageKey || e is! GeneratedFormTextField) {
+          return e;
+        }
+        return GeneratedFormTextField(
+          e.key,
+          label: e.label,
+          value: (e.value ?? '') as String,
+          required: false,
+          hint: e.hint,
+          autoCompleteOptions: packageOptions,
+          trailingKey: 'linkedPicker$linkedPickerRevision',
+          trailing: IconButton(
+            icon: const Icon(Icons.apps),
+            tooltip: tr('pickInstalledApp'),
+            onPressed: () async {
+              final picked = await showSkInstalledAppPicker(
+                context,
+                selected: additionalSettings[skLinkedPackageKey] as String?,
+              );
+              if (picked == null) return;
+              setState(() {
+                additionalSettings[skLinkedPackageKey] = picked;
+                linkedPickerRevision++;
+              });
+            },
+          ),
+        );
+      }).toList();
+    }).toList();
+  }
+
   Widget _buildSourceSpecificForm(SettingsProvider settingsProvider) {
     final s = pickedSource!;
     final formItems = cloneFormItems(s.combinedAppSpecificSettingFormItems);
@@ -717,7 +768,7 @@ class AddAppPageState extends State<AddAppPage> {
         '${s.name}-${s.hostChanged.toString()}-${s.hostIdenticalDespiteAnyChange.toString()}',
       ),
       items: [
-        ...formItems,
+        ..._withLinkedAppPicker(formItems),
         ...(pickedSourceOverride != null
             ? s.sourceConfigSettingFormItems.map((e) => [e])
             : []),
@@ -883,6 +934,55 @@ class AddAppPageState extends State<AddAppPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildUrlRow(context, settingsProvider, doingSomething),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      // Fork: the old bare "+" in the row above gave no hint of
+                      // what it would do; this states it, and sits below the
+                      // URL field where the flow actually ends.
+                      onPressed:
+                          doingSomething ||
+                              pickedSource == null ||
+                              !_urlValid ||
+                              userInput.trim().isEmpty ||
+                              (pickedSource!
+                                      .combinedAppSpecificSettingFormItems
+                                      .isNotEmpty &&
+                                  !additionalSettingsValid)
+                          ? null
+                          : () {
+                              settingsProvider.selectionClick();
+                              addApp(context);
+                            },
+                      // The one action that commits the form: the main pill
+                      // of the page (3 dp, bold), never a filled slab.
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      // Text only — no leading icon; while the source is being
+                      // fetched the label gives way to the spinner rather than
+                      // sharing the button with it.
+                      child: gettingAppInfo
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              pickedSource != null
+                                  ? tr(
+                                      'addAppFromX',
+                                      args: [pickedSource!.name],
+                                    )
+                                  : tr('addThisApp'),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ),
                   if (pickedSource != null) ...[
                     const SizedBox(height: 13),
                     _buildSourceOverrideField(context),

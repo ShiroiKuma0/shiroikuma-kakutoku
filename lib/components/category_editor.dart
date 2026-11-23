@@ -1,7 +1,8 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/foundation.dart' show setEquals;
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/components/sk_pills.dart';
 import 'package:obtainium/theme.dart';
 import 'package:obtainium/utils/color_utils.dart' show generateRandomLightColor;
 import 'package:obtainium/components/generated_form_renderer.dart';
@@ -340,9 +341,13 @@ class _CategoryEditorSheetState extends State<_CategoryEditorSheet> {
                       onPressed: _delete,
                       icon: const Icon(Icons.delete_outline),
                       label: Text(tr('remove')),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                      ),
+                      style:
+                          skDeletePill(context) ??
+                          TextButton.styleFrom(
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.error,
+                          ),
                     ),
                   const Spacer(),
                   TextButton(

@@ -1,0 +1,1036 @@
+# 白い熊 獲得 — fork changelog
+
+Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
+notes live in the GitHub release history; this file tracks only the fork's changes.
+
+## 1.6.17+001 — current
+
+Base: upstream Obtainium **1.6.17** (`versionCode` 2356), fork `versionCode` `23560001`.
+
+Two upstream releases in one step. `v1.6.16` is the restructuring that was held last time — 122
+commits, 144 files, `source_provider.dart` cut from 1 897 lines to 370 — and `v1.6.17` is the
+same-day follow-up that restores the track-only pseudo-version controls the restructuring had
+dropped from the app page. All forty-five fork commits replayed, with nine stops touching 28 files.
+
+### Translations: the rule again, not a hand merge
+- **Twenty-six locales conflicted with the rebranding.** As before, the fork's translation change
+  is one substitution — `Obtainium` → `白い熊 獲得` in values, keys untouched — and it was checked
+  against every locale of the previous base before being trusted (31 of 32 reproduce byte-for-byte;
+  `en.json` differs only by the fork's own feature strings). Each conflicted file is therefore
+  upstream's new text with the rule re-applied.
+- **`en.json` kept both sides at each of its two stops**: upstream's new strings (list density,
+  signing-certificate mismatches, Uptodown errors, `refresh`, `logsCleared`) and the fork's
+  (linked-app notes, `rebuildToUpdate…`, `setAsUpdated…`, `trackCommits…`, `updateOnlyIfNewer`).
+
+### Relocations — the fork's provider hunks follow upstream's split
+- **`enforceTrackOnlyFor()`**, the per-app track-only rule GitHub's commit following overrides,
+  now lives on `AppSource` in `app_sources/app_source.dart`, next to the `enforceTrackOnly` flag it
+  refines; `SourceProvider.getApp()` still consults it.
+- **The linked-package form rows** (`linkedInstalledPackage`, `linkedVersionStripRegEx`,
+  `updateOnlyIfNewer`) and **the title-first reordering** of the options form moved with the
+  common rows into `app_source.dart`.
+- **The `skIsOutdated()` guard** sits at the top of `isAppUpdateable()` in
+  `services/version_service.dart`, where upstream's rolling-tag and numeric-comparison logic now
+  lives — so the fork's rules (build-variant suffixes, set-as-updated, commit identity, the
+  linked-package "only if newer" gate) still govern every call site upstream routes through it.
+
+### Re-placed inside upstream's extracted helpers
+- **Settings**: the 白い熊 獲得 UI row goes into `_buildLandingList()`; the wiki link and swatch
+  label as before.
+- **Add app**: upstream's `_buildUrlRow()` loses its bare "+" again and the fork's labelled
+  full-width button sits below it; `_withLinkedAppPicker()` wraps the options form unchanged.
+- **Form renderer**: the `excludes` release and the `disabledBy` inertness went into upstream's
+  new `_buildItem()`; the field-fill and card-run logic merged on its own.
+- **App page**: `appsProvider` became a state field upstream, so `_getPrimaryButton()` lost its
+  argument at all three fork call sites; the options page keeps the fork's `StatefulBuilder` and
+  picker but takes upstream's restored back arrow; the version block is the fork's, so upstream's
+  new `_installedVersionLabel()` was dropped as dead; the download-size probe runs from upstream's
+  post-frame callback with the fork's "only when outdated" condition; the icon tap opens the
+  linked package inside upstream's `TvFocusRing`; the fork's `Stack` with the running line keeps
+  upstream's four-argument `_buildSourceInfoSections()`.
+- **App list tile**: the linked gate on the update button and the wider version label
+  (`maxWidth / 2, 260`) inside upstream's TV `ExcludeFocus` branches.
+- **Lifecycle**: `getCorrectedInstallStatusAppIfPossible()` is upstream's `reconcileInstallStatus()`
+  now, keeping the fork's `linkedInfo` parameter and linked short-circuit at both call sites.
+- **Icon cache**: upstream now refreshes a cached icon when the package it came from is updated
+  (#3306); the fork keys that staleness check on `skIconSource()` — the linked local build for a
+  linked entry — so a rebuilt fork APK refreshes its entry's icon too.
+- **Update checks**: the fork's `_isReportableUpdate()` gate stays; upstream removed the inline
+  TLS-handshake retry (it lives in the per-app error path now), and the fork's second copy of the
+  gate went with it.
+- **`main.dart`**: the knob-driven theme keeps precedence and upstream's `isTV` argument is passed
+  to `buildObtainiumTheme()` on the stock branch.
+
+### Two things the replay could not see, both caught by the analyzer
+- **`trailing` / `trailingKey` restored on `GeneratedFormTextField`.** Upstream removed them as
+  dead code; the fork's linked-app picker button is built on them (the trailing widget replaces
+  the help icon, and a moved `trailingKey` re-initialises the field, which is how a picked value
+  reaches the text controller). Back in the model and the two renderer lines that consume them.
+- **The six `sk_*` files moved to `material_ui`.** Upstream migrated every file under `lib/` from
+  `flutter/material` to `material_ui`, a full fork of the material library with its own
+  `ThemeData` and `MaterialApp`; `buildSkTheme()` was returning the other library's `ThemeData`,
+  which `MaterialApp` cannot take, and the UI page's widgets would have looked up a `Theme` that
+  is not in the tree. Same import swap upstream made everywhere else.
+
+### Toolchain
+- **Gradle 9.1 → 9.4.1, AGP 9.0.1 → 9.2.1, `android.builtInKotlin=true`** (the legacy Kotlin
+  Gradle plugin is gone); `dynamic_system_colors` → `dynamic_color` + `material_ui`; the
+  unmaintained `android_system_font` and `shizuku_apk_installer` plugins move to upstream's own
+  forks. Upstream's Flutter pin is 3.47.4; the fork still builds on 3.47.1 (the declared floor is
+  unchanged at 3.44). Remaining `dart format` differences are drift between those two formatter
+  versions, on upstream's lines as much as ours, and were left alone.
+- **`MainActivity.kt`** grew 226 upstream lines (installer result detection); the fork's
+  `SK_CHANNEL` restart handler merged beside them. The `automation/` package and the
+  `StateExportReceiver` are untouched.
+
+### The rest of upstream's 1.6.16 and 1.6.17
+- **APK signing certificates are verified before installing** (#2922), with a distinct error for a
+  hash you configured versus one that merely differs from the installed app.
+- **External-installer completion is detected from the installer's own result** (#3091), and every
+  installable container type is recognised.
+- **Split APKs**: several split URLs in one `apkUrls` entry, RuStore split resolution via a
+  device-profile request, summed split sizes in the size probe, a specific error for RuStore's
+  external-source listings (#3298).
+- **Minimum update age** is honoured when adding apps and by list-based sources, with the
+  suppression bugs fixed (#3303).
+- **Rolling version tags show updates**, and version detection, GitLab APK assets, app-directory
+  recovery and the AGP build are fixed (#3215, #2732, #2860, #3188).
+- **Networking**: retries on 429/5xx and transient failures, resumed truncated downloads, per-hop
+  redirect clients, no header leakage across redirects, no leaked HTTP clients.
+- **App list**: a density setting (#2620), stable sort for equal keys, cancelling a download from
+  the list, bulk-install scope and stale-filter fixes, cached icons refreshed on update.
+- **Android TV**: full D-pad navigability, focus rings, back navigation on pushed pages, minimum
+  text-button height, selection-dialog actions on one row.
+- **Sources**: Uptodown downloads via its API plus search; APKMirror release pages, changelogs,
+  sizes and package IDs; Huawei AppGallery `.ru`; HTML sources discover URLs in parsed attributes
+  and handle relative and quoted links; F-Droid search URLs canonicalised; the ForgeJo token is
+  persisted globally and the GitHub-only settings are dropped (#2788); real GitHub auth errors
+  surface instead of being swallowed.
+- **Import/export**: confirmation before an import overwrites, credentials stripped from exports,
+  bytes-only file imports, filter-aware selection, imported settings clamped, welcome-dialog
+  dismissal persisted.
+- **Repo**: emulator end-to-end suites with a local runner, `CONTRIBUTING.md`, new issue
+  templates; `bs`, `hu`, `ja`, `pl`, `ru`, `zh` translations updated.
+
+## 1.6.15+001
+
+Base: upstream Obtainium **1.6.15** (`versionCode` 2354), fork `versionCode` `23540001`.
+
+Forty-three commits replayed against four conflicts, all of them the fork's brand meeting an
+upstream rewording rather than a disagreement about behaviour. Three were translations — `hu.json`
+tightening one phrase in the Google-verification warning, `ja.json` recasting the battery note and
+two more strings, and `tr.json`, where upstream rewrote the Turkish translation top to bottom, so
+the whole file conflicted at once — and the fourth was `README.md`, where upstream's "temporarily
+remove banner" landed inside the block the fork README replaces outright.
+
+### Rebranding is a rule, so it was re-run rather than re-typed
+- **The fork's translation change is exactly one substitution** — `Obtainium` → `白い熊 獲得` in
+  values only, keys untouched. Before trusting that description, it was checked: applying the
+  substitution to every one of the previous base's 29 locales reproduces the fork's files
+  byte-for-byte (`en.json` differs only by the feature strings later commits add).
+- **So each conflicted file is upstream's new text with the rule applied**, not a hand merge of
+  two versions of a 960-line file. Upstream's rewording is kept in full; only the brand is ours.
+
+### Eight files both sides touch, all merged textually, each read back
+- **The WorkManager task is now cancelled when background checks are disabled** (#3272) and
+  re-registered — with the `update` policy, not `keep` — when the interval changes; a
+  settings-provider listener drives it. The whole mechanism sits directly beside the fork's
+  self-tracking block in `main.dart`, and its five pieces (handle, last-synced interval, sync,
+  listener, `dispose` unhook) are all present and identical to upstream's, offset by our lines.
+- **The auto-export skip is logged** (#3227) when the export-directory grant has been revoked.
+  It landed in the `exportDir == null` branch above the fork's one-ZIP export path, which is the
+  only place it can mean anything.
+- **The root installer is additive**: a new `InstallerMode.root`, a `RootInstaller`, and a
+  permission check on selection that falls back to the system installer with a
+  `rootNotGranted` error. `settings_provider.dart`, `settings.dart` and
+  `apps_provider_install.dart` each gained a branch; none of the fork's hunks moved.
+- **The export-directory picker is checked before it is opened** (some TV boxes have nothing
+  that handles `ACTION_OPEN_DOCUMENT_TREE`), and releasing a stale grant is best-effort.
+- **GitHub's certificate-pinning fix** (#3263) adds the ISRG roots to the pinned set, since
+  release-asset downloads redirect to `release-assets.githubusercontent.com`; it merged clear of
+  the fork's five call sites, whose only upstream change is a docs link and a proxy hint.
+- **TV clearance and focus** in `apps.dart` — 160 px at the bottom of the list on TV, and the add
+  button no longer auto-focuses — landed around, not in, the fork's ordering and update code.
+
+### The rest of upstream's 1.6.15
+- **Root as an install method**, with the same "pretend to be Google Play" option Shizuku has.
+- **Search for RuStore and Huawei AppGallery.**
+- **The zip APK filter is exposed** for Direct APK Link and HTML sources (#3278).
+- **Redirecting source URLs are corrected to their destination**, and track-only sources carry
+  a note saying so (#3276).
+- **The log viewer's dead share action on TV is a copy-to-clipboard** (#3235); the category-delete
+  warning is singular; `hu`, `ja`, `pl` and `tr` translations updated.
+
+`v1.6.16` was tagged the same day this was built, as a pre-release. It is held: it moves the
+Flutter pin to 3.47.4, restructures `source_provider.dart` into a `services/` layer and rewrites
+the version logic the fork's linked-version and commit-following code sits on — a port, not a
+rebase, and one for when upstream calls it stable.
+
+## 1.6.14+004
+
+Base: upstream Obtainium **1.6.14** (`versionCode` 2353), fork `versionCode` `23530004`.
+
+The sister-app automation contract moves to **v2**: the gate opens by default, the token becomes
+something a caller may be asked for rather than the thing that lets it in, and a second, identified
+door is added through which this app can be backed up **with its data** and have it put back on a
+wiped phone.
+
+### The gate: a switch that ships ON, and a token that is OFF
+- **`automation_enabled` now defaults to true and a new `automation_require_token` defaults to
+  false.** v1 shipped closed: the switch was off and a caller also had to present a 48-character
+  secret pasted from this app's settings into the caller's. That is the wrong shape for what this
+  is now for — **a pasted secret cannot survive a wipe**, and the case being served is a clean
+  phone where nothing has been configured and nobody has pasted anything. A gate that only works
+  once the phone is already set up is no gate for setting the phone up.
+- **A token sent to an app that does not require one is IGNORED, never refused.** Tokens outlive
+  the settings they were pasted for, and a caller still sending one — because it was configured
+  last year, or because another app on the batch does want one — must still be served. Refusing it
+  would turn "one switch was turned off" into "half the batch mysteriously fails".
+- **Both checks live in one function.** Two of them written out at each entry point is how
+  "automation disabled" and "bad token" drift apart; the two stay distinct as answers because they
+  debug differently. The constant-time compare stays for when the token really is required.
+- **Three rows, inside the existing Export / Import section** rather than a section of their own,
+  because this is a backup feature and that is where backup lives: the master switch, then
+  「Use authorization token?」, then the token row — **shown only when the token is being asked
+  for**, since a 48-character secret sitting under an off switch invites pasting it somewhere it
+  will do nothing. The token is generated on first read, which is now the moment it is first
+  wanted rather than the moment the page opens.
+
+### A data door: a provider, a verified caller, and a file descriptor
+- **A new `ContentProvider` at `shiroikuma.kakutoku.automation`** answers `describe`, `export`,
+  `import` and `cancel`, in the same `OK:` / `ERROR:` grammar the broadcast contract already used.
+  It exists because **a broadcast cannot tell you who sent it** — which is precisely what the
+  shared secret used to paper over — while a provider is handed the caller's identity by the
+  framework. It also answers synchronously, which a companion drawing one row per installed app
+  needs and a broadcast round trip per app cannot give.
+- **The caller is checked three ways, and each exists because the one before it is not enough:**
+  an **exact package name** from a fixed map — never a prefix, because a prefix is not an identity
+  and any sideloaded app may call itself `shiroikuma.evil`; the **uid the kernel reports**, since a
+  declared attribution can be borrowed and a uid cannot; and a **pinned signing certificate**,
+  which is what closes the real gap — whichever caller package is absent from the device is a name
+  anyone can take, and a clean phone is exactly a device where not everything is installed yet.
+- **The payload travels through a `ParcelFileDescriptor` the caller opens** — not a path, not a
+  `content://` URI. A backup is not a stable directory while it is being assembled, encryption and
+  checksums are computed per file the owner knows about, and a file this app dropped in itself
+  would sit unencrypted and unverified inside someone else's archive. The descriptor is duplicated
+  before it leaves the provider call and closed on the single terminal answer. A consequence worth
+  having: the automation path **no longer needs All-files access** at all.
+- **Import exists ONLY here.** It never gets a broadcast action: an import overwrites this app's
+  data, and the broadcast receiver is exported with no permission, so an import there would let any
+  app on the phone wipe any sister app.
+- **The work runs in a foreground service**, never in the provider call or a receiver: a binder
+  call would hold the caller's UI, report no progress and refuse cancellation, and a backgrounded
+  app writing for minutes is frozen mid-stream on this phone — which yields a truncated archive
+  underneath a success reply, the one failure indistinguishable from a good backup until the day
+  someone restores it.
+- **Capability discovery lives in the manifest** — `shiroikuma.automation.contract`, `format` and
+  `min_format` — because a **frozen app cannot be asked anything**, and this app is often frozen.
+  An app without those entries is simply not offered for data backup, so implementing nothing
+  claims nothing.
+
+### The gate is split across the two languages, deliberately
+- **Dart stays authoritative.** `SkAutomation` owns the keys, the settings rows write them, and the
+  broadcast path is judged there, next to the export it is about to run.
+- **`SkAutomationGate.kt` mirrors it natively** for the provider, reading the *same*
+  `FlutterSharedPreferences` store with the same `flutter.`-prefixed keys and the same defaults —
+  the same values, not a second source of truth. It has to exist because a provider call must
+  answer inside the binder transaction, and booting a Flutter engine per `describe` would cost a
+  caller listing forty apps the better part of a minute. Both files carry a "change one, change the
+  other" note.
+- The service boots Dart headlessly on **its own channel and entrypoint** rather than sharing the
+  broadcast receiver's, so the path already proven on this phone is not disturbed to make room.
+
+### Three defects found while shipping it
+- **The data service now calls `startForeground` before any early return.** Once
+  `startForegroundService` has been invoked the platform requires the promotion whatever the
+  service then decides, so returning early on a stale job id **killed the process** with
+  `ForegroundServiceDidNotStartInTimeException` — a caller retrying would crash the app it was
+  backing up. A promotion the platform refuses is now answered and declined rather than pressed on
+  with, since a service it would not promote is one it may starve mid-write.
+- **A job refused because another is running no longer drops the foreground state.** The refusal
+  went through the same terminal path as a normal completion, which released the foreground the
+  *running* job depended on — on the one phone whose whole reason for the service is that it
+  starves background work. Foreground is now given up only when no job is left.
+- **An import awaits its writes and drains the preference channel before reporting success.**
+  Several writes on the restore path drop the Future `shared_preferences` hands back, and the
+  fork's own applier was fire-and-forget inside a `forEach`, which cannot await a callback at all.
+  Since a caller force-stops this app the instant it hears success — a `SIGKILL`, so that its
+  cached preferences cannot be written back over the import — anything still in flight was simply
+  lost, and the restore reported success over data that never arrived. **The same hole existed on
+  the hand-driven Export / Import panel**, which restarts the app immediately after an import; the
+  flush sits in the shared applier, so both paths are covered.
+
+### Packaging
+- `<queries>` names **both** sister-app callers. Without it a reply broadcast's `setPackage` fails
+  silently on Android 11+ — the export runs, writes correctly, and is never heard of — and the
+  caller check cannot read a signing certificate it cannot see, refusing a legitimate call as
+  "signature unreadable". This app already declares `QUERY_ALL_PACKAGES` for version tracking, so
+  the fault was latent rather than live; the declaration now rests on nothing.
+- Fork `versionCode` `23530004`, `versionName` `1.6.14+004`.
+
+## 1.6.14+001
+
+Base: upstream Obtainium **1.6.14** (`versionCode` 2353), fork `versionCode` `23530001`.
+
+Thirty-nine commits replayed against three conflicts, every one of them the fork's rebranding
+meeting an upstream rewording rather than a disagreement about behaviour: `nl.json` tightening
+"GitHub pagina" to "GitHub-pagina", `ru.json` rephrasing the APK link filter and carrying our name
+in the link message, and `README.md`, where upstream's new Deep Links line landed inside the block
+the fork README replaces outright. Upstream's wording was kept in both translations; only the brand
+is ours.
+
+The interesting work was in the five files upstream and the fork both touch. All five merged
+textually — which is exactly when a rebase is worth distrusting, so each was read back to check it
+still means what it says.
+
+### A fix that a clean merge nearly rendered inert
+- **Upstream spaces out background retries for failing apps** (#3187): a check that fails still has
+  its `lastUpdateCheck` advanced, so the 15-minute background task stops hammering it and the app
+  becomes due again after a full update interval instead.
+- **It is implemented in three pieces** — a `failedApps` list declared before the loop, filled in
+  the per-app error path, and saved after it. The fork rewrote that loop long ago into
+  `fetchOne()` plus bounded concurrent workers, so the declaration and the save had somewhere
+  obvious to land while the population site did not.
+- **It landed inside `fetchOne()`'s catch block**, which is the one place that makes it work. Had
+  it merged anywhere else the list would have been declared, saved, and always empty — a fix that
+  compiles, analyses clean, and does nothing.
+
+### The install queue gained a way out of a lost result
+- **Foreground stock-installer installs now race the intent result against package polling**
+  (#3255), first conclusive outcome winning, with a ten-minute overall cap. An install result lost
+  because the activity was recreated while the user was at a system prompt no longer stalls
+  anything.
+- **This sits in the path the fork's serialized install queue feeds**, so the two compose: the
+  queue keeps installs one-at-a-time, and the race keeps a silent one from holding the queue shut.
+  Backgrounded and unconfirmed still waits, since the user may simply be reading the prompt.
+
+### GitHub: a rejected token stops being fatal — on the fork's paths too
+- **Upstream surfaces the real rejection message and retries without the token** (#3211) when
+  GitHub answers 401/403 with "bad credentials" or "not accessible by personal access token". A PAT
+  that is not authorised for a repository must not block updates of a public one.
+- **Only upstream's own call sites went through the new helper.** The fork's five — the
+  `releases/latest` fallback consulted when a release listing comes back empty, the upstream
+  version read out of a file in the repo, the upstream version prefix and its tag lookup, and the
+  followed-commit fetch — still called `sourceRequest` directly, so a rejected token would have
+  kept failing on precisely the paths this fork added.
+- **They now run through `_sourceRequestWithAuthFallback` as well**, which is the only change made
+  here beyond replaying the fork.
+
+### Third-party F-Droid repositories read the modern index
+- **`index-v2.json` is supported**, with `index.xml` kept as the fallback rather than combined with
+  it — a combine-both attempt was tried upstream and reverted.
+- **Non-stable releases are excluded from repo selection** via the suggested-version-code toggle,
+  and **App IDs pre-fill from an `appid` query parameter**, so adding from a repo search result no
+  longer leaves the ID blank.
+
+### The rest of upstream's 1.6.14
+- **A per-app minimum update age slider**, with "use global default" and "no delay" positions, as a
+  new form item. It survived the fork's card treatment: `isFieldRow` picked up the slider, and a
+  field row draws its own outline instead of being wrapped in a `ConnectedCard`.
+- **The category editor was reworked** — the new-category button flows inline with the chips, and
+  the edit sheet's action buttons no longer hide behind the system navigation bar.
+- **RuStore obtains again**, with certificate pinning implemented for it and the pinning bug that
+  ignored subdomains fixed; the Harica and Russian Mintsifry roots ship as bundled CA assets. All
+  of it merged clear of the fork's `HttpService` hunks.
+- **Huawei AppGallery** infers app IDs correctly after the `appdl` fallback removal, and stops
+  reading APK filename timestamps as versions when its API fails (#3247).
+- **Forgejo supports private overridden hosts** (#3198).
+
+## 1.6.13+002
+
+Base: upstream Obtainium **1.6.13** (`versionCode` 2352), fork `versionCode` `23520002`.
+
+One fix, to a SourceForge layout that quietly defeated the automatic ABI filter.
+
+### A flat SourceForge project handed the phone the wrong architecture
+- **The driver reads a release's version from the path**, assuming the project is laid out as
+  `files/<version>/<file>.apk`. It strips the trailing `/download`, then strips the file name —
+  but only when a directory is left underneath it.
+- **A project that keeps its APKs directly in `files/` has no such directory**, so the file name
+  itself survives as the version. Every architecture's build then reads as a *separate release*:
+  the entry ends up holding exactly one APK URL, `filterApksByArch` only acts on a list of two or
+  more, and so whichever architecture the RSS feed happens to list first is the one that installs.
+- **For `android-ports-for-gnu-emacs` that is x86_64**, on a phone that is arm64 — and with a
+  single URL in the entry there was nothing to pick from in the APK list either. The feed carries
+  89 APKs across four versions and seven ABIs.
+- **`getVersion()` now detects the flat case** — nothing but the file name left once `/download`
+  has gone — and reduces the name through `stripApkExtensionAndAbi()`, which drops a container
+  extension and then a trailing ABI tag. `emacs-32.0.50-35-x86_64.apk` and
+  `emacs-32.0.50-35-arm64-v8a.apk` both become `emacs-32.0.50-35`, so the two group into one
+  release and the arch filter picks arm64-v8a. Projects laid out under a version directory read
+  exactly as they did before.
+- **The ABI list is ordered longest first**, so `armeabi-v7a` is taken whole rather than leaving a
+  stray `-v7a` behind once `armeabi` has matched, and the extension list is
+  `ApkFilterService.apkContainerExtensions` rather than a second copy of it.
+- **The version reads as the file name minus extension and ABI** (`emacs-32.0.50-35`) — truthful,
+  since guessing where the version sits inside an arbitrary file name is not something the driver
+  can do safely. A `versionExtractionRegEx` of `([\d.]+-\d+)$` on match group `1` shortens it to
+  `32.0.50-35` for anyone who wants that.
+
+## 1.6.13+001
+
+Base: upstream Obtainium **1.6.13** (`versionCode` 2352), fork `versionCode` `23520001`.
+
+The quietest rebase this fork has had. All 35 commits replayed with a single conflict — a context
+clash in `settings_provider.dart`, where the fork's remove-button colour constants sit between
+upstream's theme colour and `tryParseLocale` — and no fork behaviour needed rethinking. What is
+worth reading here is upstream's side: every one of 1.6.13's five new features lands in a file the
+fork patches, and all five merged clean.
+
+### Upstream's new settings arrived beside the fork's own
+- **Minimum age for updates**, global and per-app (`minimumUpdateAgeDays`), holds a release back
+  until it has been out N days — a supply-chain delay against a compromised build. It defaults to
+  off; once set, the fork's automation simply never sees the suppressed update, which is the
+  reading that was wanted.
+- **A global APK filter regex** now applies wherever an entry has no filter of its own, so the
+  per-app field becomes an override rather than the only place to say it.
+- **Skipping the bulk update/install confirmation** is optional now, gated in `apps.dart` right
+  above where the fork's own selection work sits.
+- **Collapsing all app groups on startup** is a setting rather than a thing to redo each launch.
+- All four tiles landed in upstream's re-nested settings tree without displacing the 白い熊 獲得
+  UI row.
+
+### Downloads: an opt-in that lets a source fall back to HTTP
+- **`AppSource` gained `allowInsecureRedirects`**, threaded through to the downloader. Vivo App
+  Store redirects its download URLs from HTTPS down to HTTP, and the redirect was being refused —
+  the source now opts in and its downloads work.
+- **Zipped APKs served over a direct link** are supported, with the container's file extension
+  preserved on download rather than assumed to be `.apk`.
+
+### A confirmation dialog that had been answering "no" all along
+- **`showContinueCancelDialog` always returned `false`.** Its `singleNullReturnButton` wiring made
+  the modal answer `null` on confirm, which the helper read as a cancel — quietly breaking log
+  deletion, categorisation and the release-date confirmation. Upstream dropped both the wiring and
+  the `continueText` parameter that fed it.
+- **The fork's three call sites never passed `continueText`**, and its own additions to
+  `ui_widgets.dart` — the rebuild-to-update dialog and the whole-row `ToggleTile` disable — sit
+  below the changed hunk, so the fix carried through untouched.
+
+### Logging catches what the framework throws
+- **`FlutterError.onError` now feeds the in-app log store**, alongside the existing
+  `PlatformDispatcher.onError` hook. Exceptions thrown inside UI handlers go to the former, so
+  until now they never reached the log at all.
+
+## 1.6.12+001
+
+Base: upstream Obtainium **1.6.12** (`versionCode` 2351), fork `versionCode` `23510001`.
+
+First build on the new upstream line. Obtainium 1.6.12 centralises logging, re-indents every
+translation file and re-wraps much of `lib/` with a newer Dart formatter, so most of the fork layer
+replayed mechanically — four places needed real reconciliation, and one dependency change had to be
+ported. Upstream's own notes for 1.6.12 (a Samsung Galaxy Store source, AppGallery fetched over its
+API, the RuStore 419 fix, opt-in certificate pinning) live in their release history.
+
+### The RTL arrow fix asks the fork what counts as an update
+- **Upstream added `isVersionUpdate()` and a direction override to go with it.** Under an RTL locale
+  the `old → new` transition was being bidi-mirrored, so an update read as a downgrade; 1.6.12
+  forces LTR on that line whenever an app has one.
+- **The helper it added compares two version strings for equality**, which is the question the fork
+  stopped asking long ago — a linked entry compares against an installed package, a git-followed
+  entry against a commit, and a bare build-variant suffix must not count at all.
+- **`isVersionUpdate()` now consults `skIsOutdated`**, so the forced direction and the text it
+  applies to agree on every entry. The fork's wrappable three-line version sits inside upstream's
+  new `Directionality`, so long git-versioned strings still fold instead of truncating.
+
+### App detail page keeps its own frame over upstream's structure
+- **Upstream reorganised the page's slivers**; the fork's `Stack`, its always-scrollable physics
+  (without which a page short enough to fit never hands the pull to the refresh indicator) and the
+  running line under the status bar replayed onto the new arrangement.
+- **Section spacings now use upstream's `AppSpacings.sectionGap`** rather than the literal `20` the
+  fork's older commits were written against. Same gap, one definition.
+
+### Settings, and the logging refactor underneath it
+- **`LogsProvider` is gone upstream**, replaced by `core/logging/AppLogger` with a log database of
+  its own. No fork code logged through it, so the refactor carried through untouched apart from a
+  dropped import.
+- **The 白い熊 獲得 UI row was re-inserted into upstream's re-nested settings tree**, keeping its
+  brush icon and its own full page.
+
+### Translations merged key by key
+- **Upstream re-indented every locale file from two spaces to four** — 926 changed lines in
+  `en.json` alone, of which ten are actual new keys.
+- **The fork's renames were replayed against the merge base rather than as a patch**, so upstream's
+  formatting and its new keys land intact while every 白い熊 獲得 value survives. `en.json` now
+  differs from upstream by exactly the sixteen rebranded strings.
+
+### Toolchain: Flutter 3.47.1, and a file picker that changed shape
+- **1.6.12 cannot be built on Flutter 3.44.x.** It requires `intl ^0.20.3`, and every 3.44 release
+  pins `flutter_localizations` to `intl 0.20.2`, so the pinned SDK moved to **3.47.1** — upstream's
+  own `.flutter` commit.
+- **That brought `file_picker` 12.0.0 stable, which deleted `FilePickerResult`**: `pickFiles()` now
+  answers a plain list. Both fork call sites — category import and font import — use the new
+  single-file `pickFile()` instead.
+
+## 1.6.11+003
+
+Base: upstream Obtainium **1.6.11** (`versionCode` 2350), fork `versionCode` `23500003`.
+
+Two fixes to how the GitHub source resolves a repo whose release listing comes back empty — the
+case that had a linked entry reporting an update no rebase could ever satisfy. Build `+002` carried
+the second of them on its own.
+
+### An empty release listing is a claim to verify, not a fact
+- **GitHub sometimes serves `[]` for a repo that plainly has releases.** For
+  `premnirmal/StockTicker` the listing answers empty on every page — authenticated or not — while
+  its own `Link` header advertises 33 pages, and `releases/latest` returns `4.1.004` with its assets
+  attached.
+- **Believed, that empty list drops a track-only entry into the tag fallback**, where a repo that
+  tags its CI builds by counter offers nothing but numbers. The entry reported `300900767` as the
+  upstream version — a number no build of ours can ever match — so a `4.1.004` fork showed a
+  permanent phantom update.
+- **The source now asks `releases/latest` before concluding a repo has published nothing**, and
+  proceeds with that release when it answers. One extra request, only on the path that was about to
+  fail anyway, and only for the releases endpoint — the tag fallback re-enters the same code with a
+  `/tags` URL, which has no `latest` of its own. Any failure leaves the tag fallback to run exactly
+  as before, which stays the right answer for a repo that really has published nothing.
+
+### Dateless releases order by name instead of arbitrarily
+- **The tag list the source falls back to carries no dates**, and the date comparator answered
+  "later" for every dateless pair: `compare(a, b)` and `compare(b, a)` both said so, which is not an
+  ordering at all. Dart's quicksort then handed back an arbitrary permutation, and "latest" came out
+  a random tag — `300900719`, a CI counter from October 2020.
+- **Dateless entries are now settled by name**, so such a list resolves to its highest tag. A dated
+  release still outranks a dateless one: a release that does not say when it was cut must never take
+  "latest" from one that does.
+
+## 1.6.11+001
+
+Base: upstream Obtainium **1.6.11** (`versionCode` 2350), fork `versionCode` `23500001`.
+
+First build on the new upstream line. Obtainium 1.6.11 is a large release — a codebase-wide
+refactor, a settings-page rewrite, and an install pipeline of its own — and in three places it
+arrived at the same problems the fork had already solved by hand. Those places were reconciled
+rather than re-patched, so the fork layer is now smaller than it was on 1.6.10.
+
+### Update detection runs through upstream's own choke point
+- **Upstream centralised the question the fork had been answering in eight places.** 1.6.11
+  introduces `isAppUpdateable`, one function deciding whether an app counts as having an update,
+  where 1.6.10 asked that inline at every call site — each of which the fork had patched to call
+  `skIsOutdated` instead.
+- **The fork's rules now live inside upstream's function.** `isAppUpdateable` consults
+  `skIsOutdated` first, so bare build-variant suffixes, pushes waved through with **Set as
+  updated**, commit identity for entries following an upstream head, and the linked-package "only
+  if newer" rule govern **every** call site — including any upstream adds later — instead of the
+  eight the fork used to hold open.
+- **`versionExtractionRegEx` works again.** The 1.6.10 patch had replaced the update-detection
+  block wholesale, taking upstream's version-extraction regex with it as collateral. Routing
+  through upstream's function restores it. With no regex configured — the default — nothing
+  changes.
+- **Update notifications honour "hide downgrades".** A source that moves *backwards* no longer
+  raises a notification when that setting is on. Linked entries are unaffected: they still answer
+  to `skIsOutdated` alone.
+
+### Upstream's install pipeline replaces the fork's
+- **Both had built the same thing.** Upstream 1.6.11 begins installing each app the moment its
+  download finishes, serialising the installs behind a chain — which is what the fork's install
+  queue did. Upstream's is now the one that runs, and the fork's `_obtainApp` machinery is gone.
+- **Self-update-last needed no porting.** Upstream moves 獲得 itself to the end of the queue and
+  defers its install until every other app is done, for the same reason the fork did: committing a
+  self-update can end the process and strand whatever is still queued behind it.
+- **Two things upstream does not do were kept.** Downloads stay **bounded** — upstream starts every
+  download at once, where the fork holds them to a few in flight so parsing does not saturate the UI
+  isolate — and an app waiting for a slot still shows as **queued** rather than blank. The
+  double-claim guard also stays: a second tap, or a bulk run started while a per-app one is going,
+  still cannot download or install the same app twice.
+
+### Settings moved into sub-pages
+- **Upstream split one long settings page into navigable sub-pages.** The **白い熊 獲得 UI**
+  theming page is a row there now, wearing a brush icon since upstream's own *Appearance* page took
+  the palette. Long-pressing the settings icon on the main screen still opens it directly.
+- **The fork's page footer is gone, because upstream's is.** The icon row it was built on no longer
+  exists; the **Help** link now lives in upstream's about section and still points at this repo.
+- The remove-button colour settings moved into the new tile list, unchanged.
+
+### What upstream 1.6.11 brings
+- Installs begin as each download completes during batch updates; parallel downloads default on.
+- A new **`obtainium://refresh`** deep link triggers an update check.
+- Background update checks are separated from silent installs: the interval gates checks, the
+  toggle gates installs only.
+- A failed install-status reconciliation no longer marks an app as up to date.
+- Settings reorganised into sub-pages; the filter dialog is now a bottom sheet; haptic feedback
+  across UI actions and the download/install lifecycle.
+- Export gains an installed-only filter; import reads via bytes when the path is null, fixing
+  import on Samsung devices.
+- Fixes for the vivo app store, uptodown (English locale, `.apk` extension), F-Droid
+  `versionCode`-as-version, `obtainium://` unicode double-decoding, and a per-app empty GitHub
+  token shadowing the global one.
+- `compileSdk` 37; `permission_handler` 13, `fluttertoast` 10 and `workmanager` 0.10.7.
+
+## 1.6.10+036
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490036`.
+
+### A disabled action button no longer reads as an update (fix)
+- **A dead button looked exactly like a live one.** The fork's filled-button theme pinned
+  foreground, border and fill with `WidgetStatePropertyAll` — one value for every widget state,
+  `disabled` included — which overrode Material's own dimming without putting anything in its place.
+  Black fill, yellow label, yellow border, whether the button did something or nothing.
+- **On the app page that was not merely cosmetic.** A linked entry's primary button always renders
+  and always reads **Rebase & build**, disabled only by a null press handler, so an entry that was
+  perfectly current showed what looked like a lit call to rebase — an update the entry itself never
+  claimed, its version line reading `Installed / Latest` a few rows above it.
+- **The label and the border are what fade.** They are the whole button, the fill being the page's
+  own black; dimming black against black would say nothing, so the fill stays put. The alpha is the
+  one `SkPillButton` already uses, so **Refresh from upstream** and **Rebase & build** fade alike
+  when they share a row.
+- **Every filled button in the app is covered** — dialog actions, the install/update banner, the
+  per-app download button — so a disabled action now reads as disabled wherever it appears.
+
+## 1.6.10+035
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490035`.
+
+### A build-variant suffix no longer reads as an update (fix)
+- **An upstream that tags its variant left a linked entry outdated forever.** Episteme cuts every
+  Android release as `v<X.Y.Z>-oss`. Our own build strips that, so the two versions tie on every
+  numeric part and differ only in the tail — and the comparator, unable to parse `-oss`, declined to
+  order them at all. That refusal is deliberately read as "assume an update", so `1.0.52` against
+  `1.0.52-oss` raised the download arrow on a fork that was exactly current, and no rebuild could
+  ever clear it.
+- **Such a tail is not a version component.** It names which artifact was cut, not which release,
+  and it is a constant of the project — so it is now *understood* rather than merely tolerated. A
+  tail of nothing but words leaves the parse exact, in the plain and the pre-release branch alike,
+  making `1.0.52-oss` and `1.0.52-beta-oss` equal to their bare forms.
+- **Digits are what keep it safe.** A respin (`-hotfix2`, `-r2`), and the date and `g<sha>` tails
+  the `git-versioning` skill pins forks to, all carry one and stay unparsed — those comparisons
+  remain exactly as conservative as before, so a real difference can still never be swallowed.
+- **Commit-pinned builds are untouched.** They are settled by commit identity before the comparator
+  is consulted at all, and their tails would not qualify as variant labels regardless.
+
+## 1.6.10+034
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490034`.
+
+### The upstream version of a followed commit can come from a file in the repo (new)
+- **A release tag is the wrong source for projects that do not tag their version.** Commit tracking
+  prefixed its version with the repo's newest release tag, which only works where that tag *is* the
+  version. Jami keeps `versionName = "20260731-01"` in its `build.gradle.kts` and tags nothing but
+  `android/release_502`, so a followed commit reported `android/release_502.<date>.g<sha>` — a
+  string no rebase of the fork could ever match.
+- **Name the file instead, and optionally a regex.** Two new fields under **`Follow commits instead
+  of releases`** take a path in the repo and a pattern (default `versionName = "…"`, capture group
+  one), and the version they yield becomes the prefix.
+- **Read at the followed commit's own sha, not at the branch tip.** The whole string then describes
+  one commit, instead of pairing a sha with a version literal that moved after it.
+- **Best-effort, so nothing that works today can break.** An unset field, a missing file, a pattern
+  that does not match, or a file over 1 MB (which the contents API declines to inline) all fall back
+  to the release-tag lookup exactly as before.
+- **The commit date is stated as UTC.** GitHub normalises committer dates to `Z` and drops the
+  original offset, so UTC is the only rendering a fork's build script and this app can both compute.
+  A fork pinning the commit's *own* timezone disagrees by a day for roughly one upstream commit in
+  twenty — every one of them an update no rebase could satisfy. The `git-versioning` skill now
+  specifies UTC on the other side.
+
+## 1.6.10+033
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490033`.
+
+### Set as updated (new)
+- **A push not worth a rebuild can now be waved through.** A commit-followed source moves on every
+  push, and most of those pushes are not worth rebasing and rebuilding the fork for — yet the
+  download arrow stayed up until one happened. **`Set as updated`** records the upstream version the
+  entry was told to ignore, and the entry counts as current until upstream **moves past it**.
+- **Matched by the commit, not by the version literal.** When both sides name a commit, identity
+  decides — the same sha spelled at a different length still reads as the same commit — and
+  otherwise the version strings must match exactly. Either way the very next push brings the entry
+  back.
+- **Kept with the entry, not faked into its installed version.** A linked entry's installed version
+  is refilled from the local build on every load, so a value written there would be undone within
+  seconds; the mark is stored as a per-app setting instead. It rides along with export/import,
+  survives an update check, and survives a trip through the **Additional options** page, whose form
+  knows nothing about it and would otherwise drop it on the way out.
+- **The whole app falls silent together.** The mark is read by the same `skIsOutdated` every
+  decision site already uses, so the list badge, the *Updates* filter, the update count and the
+  background notifications all clear with the arrow.
+- **The detail page says why.** An entry that reads as current only by that mark states it, and at
+  which version, under the linked-build note — nothing silently claims to be up to date.
+- **`Reset install status` is the undo**, clearing the mark along with the recorded install, since
+  the entry has gone up to date *by* that mark and there would be no other way back.
+- **The bottom bar takes a second row for it.** On a linked entry the icon actions and the
+  **`Refresh from upstream`** pill keep the top row, while **`Set as updated`** and
+  **`Rebase & build`** share the row below, half the width each — three buttons fit no phone-width
+  row. Entries without the new button keep the single row exactly as before, and the row does not
+  reshuffle mid-refresh: while a check or a download runs the button is disabled, not removed.
+
+## 1.6.10+032
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490032`.
+
+### Name each entry yourself
+- **The `Title` setting is now the whole title of an entry**, not one half of a composed one.
+  Upstream's *App name* override only ever replaced the source's name, so a linked entry still read
+  `<your build> ⇒ <source>` and two entries tracking **sibling repos of the same project** — a
+  desktop repo and its Android port — were indistinguishable in the list. A hand-set title now
+  replaces the line outright; the composed form moved to an internal `autoName` used only when no
+  title is set.
+- **It leads the Edit page** instead of sitting below the source's own switches, and **opens
+  prefilled** with the title the entry currently shows, so renaming is an edit rather than a retype.
+- **Handing the prefilled text back unchanged stores nothing.** That is what keeps an unrenamed
+  entry following its source's name and its linked build's label; clearing the field returns it to
+  automatic at any time.
+- The field is labelled **Title** (it was *App name*), in the Edit page and in *Filter apps* alike —
+  that filter matches the displayed title.
+
+### A linked entry's update points at the rebuild it needs
+- **The update button is back for linked entries**, wearing the **same filled download arrow** every
+  other app with an update carries. It had been hidden because a linked entry's installed version is
+  owned by the package it is compared against, so "mark updated" was undone by the very next save.
+- **Pressing it says what to do instead.** A dialog names the fork to rebase and the upstream
+  version to rebase onto, and points out that the entry clears itself as soon as the new build is on
+  the phone. The APK for these entries is yours to build; 白い熊 獲得 only tracks the source.
+- **The detail page's primary button follows the same route**, reading **`Rebase & build`** and
+  opening the same dialog, in place of a *Mark updated* that would have been undone anyway. It stays
+  disabled while the entry is up to date, and swipe-to-update still leaves linked entries alone.
+
+## 1.6.10+028
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490028`.
+
+### Refreshing one source
+- **A `Refresh from upstream` pill** sits in every app page's bottom bar, next to the primary
+  button. It re-checks that one source, so a single entry can be brought up to date without sweeping
+  everything you track, and greys out while a check or a download for that app is already running.
+- **Pull-down refresh on the app page now works at all.** The gesture was wired up from the start,
+  but the scroll view lacked `AlwaysScrollableScrollPhysics`: a page short enough to fit on the
+  screen could not overscroll, so the pull never reached the indicator.
+- **A running yellow progress line** appears just under the status bar for the duration of a check —
+  the same signal the main window shows — whether it came from the pill, the pull-down, or the
+  automatic check when the page opens.
+- The icon row scrolls sideways if it runs out of room, so the pill and the primary button keep
+  their full width on a narrow screen.
+
+### Comparing against your own build
+- **A linked entry takes its icon and label from the build it is linked to**, in preference to the
+  tracked package's own — an upstream that happens to be installed on the same phone no longer lends
+  the entry its icon. The on-disk icon cache refreshes whenever a link supplies the icon, so a
+  re-link survives a restart.
+- **The list names your build in full**, `+NNN` counter included (`0.25.1+039`, not `0.25.1`). The
+  stored installed version stays stripped, since that is the form the source's version is compared
+  against; only the label changed.
+- **Titles read ours-first**: `白い熊 自由動画 ⇒ FreeTube`, `白い熊 獲得 ⇒ Obtainium`.
+- **The two versions in the "Compared against" note line up under each other**, each on its own row
+  at the same left edge, instead of `(A → B)` where the leading parenthesis offset the first one by
+  half a character.
+
+### Following commits
+- **A followed commit carries the upstream version it sits on** — `0.2.79.2026-08-02.gbc343f35`
+  rather than a bare `2026-08-02.gbc343f35` — so both sides of the comparison read alike. The
+  version comes from the repo's latest release tag with a leading `v` dropped, falling back to its
+  newest tag. It is strictly a label: any failure, rate limits included, simply leaves it off rather
+  than failing an update check that already succeeded.
+- **Every `g<sha>` in a version string is read, not just the first.** A fork rebased onto more than
+  one upstream pins one sha per upstream, each upstream gets its own tracked entry, and an entry
+  counts as current as soon as **one** of those shas is the head it follows. Adjacent pins share the
+  `.` between them, so the separators are matched as lookarounds; consuming one used to hide the
+  next. The installed-app picker's ✨ suggestion follows the same rule.
+- **`Include prereleases` and `Fallback to older releases` grey out while commits are followed.**
+  They used to stay live and mutually exclusive, so switching one back on silently turned commit
+  following off again. A disabled toggle row now greys its whole row, not just the thumb.
+
+### List ordering
+- **Our own builds lead every block.** The ordering pass partitions them out first, and every split
+  that follows preserves the order it is handed, so 白い熊 entries head the updates-available,
+  installed and not-installed runs alike — each still alphabetical within, and the same inside
+  category and source groups.
+
+## 1.6.10+022
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490022`.
+
+### Update several apps at once (new)
+- **The per-app download button no longer goes dead when another app is downloading.** Stock gates
+  it — and swipe-to-update, and the detail page's install button — on a *global* "is any download
+  running", so the first tap disabled every other app on the screen. Each button now looks only at
+  **its own** app, so you can fire off as many as you like and watch them run together.
+- **Downloads run concurrently, installs strictly one at a time.** Installing is exclusive by
+  nature: the platform installer shows one prompt at a time, and the stock installer waits for you
+  to come back to the foreground. So downloads pass through a **semaphore (three at once)** while
+  installs pass through a **single global lock** — no overlapping install prompts, ever, and no
+  download waiting on one.
+- **Each app installs the moment its own download lands.** The obtain flow is pipelined per app
+  rather than "download everything, then install everything", and the queued install is awaited
+  separately, so an install prompt can never hold up the next download. The installer-permission
+  prompt and the foreground wait moved under the lock with the install they belong to.
+- **The same app can never be started twice** — a double tap, a swipe, or a bulk run overlapping a
+  per-app one is dropped rather than downloaded again. Bulk update is therefore no longer disabled
+  while downloads run: it queues what is new and skips what is already going.
+- **A self-update still runs last and on its own**, since committing it can end the process that
+  everything else is queued in.
+- Apps waiting for a download slot or for the install lock read **`Queued`** in the list and on the
+  detail page, with an empty progress track — distinct from both downloading and installing.
+
+### The app-removal dialog
+- The confirm button is now **`Remove`**, not `Continue` — it says what it does.
+- It sits at the **far left**, with Cancel at the far right, so the destructive action is nowhere
+  near where a reflex tap lands.
+- **Dark blood red `#8B0000`** in both fill and border, with a **white** label. Cancel takes the
+  border filled buttons carry in this theme — read off the theme itself, so it follows your accent
+  colour and border-width knobs rather than a hardcoded value.
+- **Both Remove colours are settable** in Settings (*Remove button colour*, which drives fill and
+  border together, and *Remove button text colour*), through the same picker the theme colour uses.
+  The picker no longer writes the setting when it is merely opened and dismissed.
+
+### The action banner is gone by default
+- The **Install/update apps** header row and its **Update** pill no longer appear unless you ask
+  for them: *Action banner* now defaults to **None**, and upstream's legacy
+  `showActionBannerForUpdateOnly` preference is no longer consulted, so the default holds on
+  existing installs too. The dropdown still turns it back on. Nothing is lost — the per-app buttons
+  and the selection menu's *Install/update selected apps* cover the same ground.
+
+## 1.6.10+019
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490019`.
+
+### Compare a tracked app against our own installed build (new)
+- **Three per-app options, right under Track-only**: *Compare against installed app*, *Strip from
+  the installed version (RegEx)* (default `\+\d+$`, our build counter), and *Only report genuinely
+  higher versions*. They ride in the app's additional settings, so an existing entry gains them
+  with no re-adding and they travel in the backup like every other per-app setting.
+- **The entry's installed version is read from the linked package**, with our fork suffix stripped:
+  a package reporting `1.6.10+015` makes the entry read `1.6.10`. Install a rebuilt fork and the
+  entry clears **itself** on the next check — the "mark updated" tap this arrangement used to need
+  every single time is gone.
+- **An update means genuinely newer, not merely different.** The comparator walks version segments
+  numerically (so `1.7` beats `1.6.10`, and unequal lengths compare correctly), ranks pre-releases
+  below the release they lead to (`dev`/`snapshot`/`nightly` < `alpha` < `beta` < `rc`/`pre` <
+  final, and `rc2` above `rc1`), and — crucially — **refuses to order what it cannot parse**,
+  falling back to Obtainium's plain "they differ, so it is an update". An odd version string can
+  never silently swallow a real update.
+- **Linking implies track-only**, enforced on save: an entry compared against a local build must
+  never offer to install the upstream APK over it.
+- **A searchable installed-app picker** on both the add-an-app and edit-an-app screens: icon,
+  label, package name and version per row, user-installed apps by default with a *Show system apps*
+  toggle, an *Unlink* entry, and a ✨ **Suggested** mark on packages whose stripped version already
+  matches what the source reports — usually the right fork, first row, first try. The field stays
+  typeable with a typeahead over installed package names, which is what makes it usable on TV and
+  with a hardware keyboard. It costs no extra package-manager enumeration: the picker reads the
+  snapshot the app already takes at startup.
+- **A linked entry wears the local build's face**: the fork's launcher icon in the list and on the
+  detail page, and a name that states the relationship — **`Obtainium ⇒ 白い熊 獲得`**. Tapping the
+  icon opens that local build rather than doing nothing. The stored app name is untouched, so
+  exports, notifications and the automation contract keep the plain upstream name.
+- On a device where the linked package is not installed, the entry simply behaves as a plain
+  track-only app — the last known base version stays put, and the detail page says which package it
+  is waiting for.
+
+### GitHub — follow commits instead of releases (new)
+- **A switch under *Include prereleases* and *Fallback to older releases***, with an optional
+  **branch** field (blank = the repo's default branch). For an upstream we rebase onto and build
+  ourselves, releases say nothing: the branch tip is the thing to watch.
+- The head commit is reported as a pseudo-release versioned **`<commit date>.g<8-char sha>`** —
+  deliberately the shape the `git-versioning` rule pins our forks to — with the commit date as the
+  release date and the commit message as the changelog.
+- **The comparison is by commit identity, not order.** Commits have no ordering, so being rebased
+  onto upstream's head *is* being up to date, whatever version literal surrounds it:
+  `6.3.0-alpha.2026-07-30.g5c0ed6a3+002` against `2026-07-30.g5c0ed6a3` reads as current, and moves
+  to "update" the moment upstream's tip does. Both the sortable and the older `<upstream>.g<sha>+N`
+  fork forms are recognised, since forks migrate one at a time. A `g` marker is required, so a
+  date-style version like `20260801` — valid hexadecimal — is never mistaken for a commit.
+- **Mutually exclusive with the two release options, without locking anything**: switching commit
+  following on releases them, and switching either of them on releases commit following. Whichever
+  you touch last wins. (Form switches gained an `excludes` list for this.)
+- Commit following yields no APK, so it is **inherently track-only** — enforced through a new
+  per-app source hook rather than a whole-source flag.
+
+### Versions read as versions
+- **A leading `v` is spelling, not a version difference.** It is stripped from every version shown —
+  list tile, detail page, app-info dialog, changelog dialog, update checklist, notifications — and
+  normalised before comparison, so `1.6.10` and `v1.6.10` can never read as an update. This also
+  cures the permanent phantom update on any ordinary app whose source tags releases with a `v`
+  while the OS reports the version without one.
+- **Long versions are shown in full.** A version string contains no spaces, so
+  `6.3.0-alpha.2026-07-30.g5c0ed6a3` had nowhere to wrap and was simply cut off; zero-width break
+  opportunities after each separator let it fold over up to three lines in a wider column instead.
+- The list tile shows the `installed → latest` arrow only when the app is genuinely outdated, and
+  the big Install/Update button, the update badge, the Updates filter, the bulk actions and the
+  background notifications all now ask the same single question.
+
+### Add & edit screens
+- **The bare `+` is gone.** Adding an app is now a full-width button below the URL that states what
+  it will do — **“Accept options below and Add this GitHub app”** — in bold black on accent yellow,
+  the loudest thing on the page, dimmed rather than disguised while the form is incomplete, and
+  showing a spinner in place of its label while the source is fetched.
+- The per-app options screen opens with an explicit **Save changes** button. Leaving the page always
+  saved; nothing said so.
+- **Form fields no longer have their borders clipped.** A tile-mode row was wrapped in a card that
+  clipped its child to a 24 dp superellipse while the field drew its own outline at 8 dp, so the
+  card's curve sliced the outline's corners off — visible as broken left and right edges on any
+  single-row form. Fields now paint their own fill in the same shape as their outline, and card runs
+  round off wherever a field interrupts them.
+
+### Packaging
+- **The build counter is zero-padded to three digits** in the version name and the APK filename
+  (`1.6.10+019`, never `+19`), so builds sort in build order in `~/tmp/`, in the phone's file
+  manager and in the release list. `versionCode` keeps the plain integer, and `BUILD_NUMBER` in
+  `fork.properties` stays an unpadded integer. Tags published before this point keep their old
+  spelling — nothing is ever retagged.
+
+## 1.6.10+9
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349), fork `versionCode` `23490009`.
+
+### 保存復元 — the export can now be stopped (new)
+- **`shiroikuma.kakutoku.action.CANCEL_EXPORT`** — a third action on the same exported receiver, so
+  a running headless export can be stopped from outside. Extras: `token` (the same gate as every
+  other request) and an optional `reply_id` (absent = the export you are running, unambiguous
+  because two at once are forbidden).
+- **It comes in through the exported receiver on purpose.** The stop path lives in Dart, and a
+  third-party caller can reach no non-exported component of this app — a stop button the requester
+  cannot actually reach is the failure this action exists to avoid.
+- **It bypasses the one-at-a-time request queue** on both the native and the Dart side: a cancel
+  that waited its turn behind the very export it is meant to stop would never arrive.
+- **The cancel answers nothing** — fire-and-forget, never `OK:`. The terminal **`ERROR:cancelled`**
+  belongs to the *original* `EXPORT_STATE` request and goes out through the normal reply channel,
+  under the existing `AtomicBoolean` guard, so a cancel and a success can never both fire.
+- **Safe to send at any time.** Nothing running, an export that already finished, a token that does
+  not match, an id naming another run — every one of them is a **silent no-op**: no error, no reply,
+  no crash.
+- **The backup folder is left exactly as it was found.** The flag is read between ZIP entries, so
+  the export unwinds at an entry boundary — never mid-`write()`, never by interrupting a thread or
+  killing the process. This app writes no `.part` file (the ZIP is built whole in memory and handed
+  over in one call), so the same promise is kept by checking on **both** sides of the write and
+  deleting the file again if the cancel landed while those bytes were going out — on the
+  absolute-path and SAF paths alike. No short archive, no stray leftovers.
+- A 5 s acknowledgement watchdog keeps the fire-and-forget cancel from holding its broadcast open
+  while the export is inside a long synchronous stretch.
+
+### 保存復元 — `LIST_CATEGORIES` states its own defaults
+- Every reply line is now **`id⇥label⇥parent⇥on|off`**, with the empty parent field the positional
+  format requires. The fourth field is this app **stating** whether an item starts ticked in the
+  backup picker instead of the picker assuming it.
+- **Every category is `on`** — nothing this app exports is large, derived *and* re-creatable — but
+  the answer is stated rather than inferred, and a category added later inherits a field that is
+  already there.
+- The in-app Export/Import sheet seeds its checkboxes from **the same flag**, so it and the
+  automation picker open on the same answer; an absent `items` extra now resolves through that
+  default set rather than "everything".
+
+### Shizuku — works with 白い熊 雫 without a compatibility stub
+- **`af.shizuku.plus.permission.API_V23` is declared explicitly.** 白い熊 雫
+  (`shiroikuma.shizuku`) defines that name and deliberately does *not* define
+  `moe.shizuku.manager.permission.API_V23`, which stock Shizuku owns — declaring both would make the
+  two managers uninstallable side by side.
+- With stock Shizuku absent, the `moe.*` name is defined by **no package on the device**. An
+  undefined permission can never be granted, so the server's `grantRuntimePermission` failed
+  silently and `checkSelfPermission()` stayed denied however often the app was re-authorized in the
+  manager. Declaring a name that actually **exists** is what lets the grant land, and drops the
+  dependency on a compatibility stub being installed.
+- The `moe.*` line (which arrives by manifest merge from the Shizuku provider AAR) is kept as the
+  stock-Shizuku fallback: a `uses-permission` naming a permission no installed package defines is
+  inert, so one build works against either server and costs nothing when only one is present.
+
+## 1.6.10+8
+
+Base: upstream Obtainium **1.6.10** (`versionCode` 2349) — `custom` rebased onto the new upstream
+release tag, fork versioning moved to `1.6.10+…` (`versionCode` `23490008` here).
+
+### Export / Import — a real backup section (new)
+- New **Export / Import** section at the top of the 白い熊 獲得 UI page, in the sister-fork house
+  style: an export-folder row that names the chosen folder and, below it, the timestamp of the
+  **latest export found in it** (a loud red warning until a folder is set), and an
+  **Export / Import…** entry opening the panel.
+- The panel backs up **everything by category** — **Sources (tracked apps) first**, then app
+  settings, source credentials, categories, and the 白い熊 獲得 UI (knobs, recent colours, and the
+  imported font files themselves) — with a **Select all** master checkbox, ArcaneChat-style round
+  pill buttons (Cancel separated left, Import + Export right), and black-yellow bordered result
+  dialogs that close the whole chain on success while leaving the panel open on failure.
+- **Import merges, never wipes**: absent categories are skipped, existing keys are updated in
+  place, tracked apps keep their installed-version state, and the result dialog offers an in-place
+  **Restart now** (a small `restartApp` platform channel) or Later.
+- The folder query is hardened against the OEM document provider: every stage has its own timeout,
+  concurrent queries are serialised onto one chain (two `listFiles` listeners share a single
+  platform event channel and the second orphans the first), only the `id` column is requested, and
+  each stage reports itself on screen so a stall is visible instead of an eternal "…".
+
+### 保存復元 — headless, token-gated state export (new)
+- **One ZIP per backup, family-named.** Every backup this app writes — from the panel and from the
+  automation path alike — is `shiroikuma-kakutoku_<yyyy-MM-dd_HH-mm-ss>.zip`, holding a
+  `manifest.json` (format/version/app/appVersion/createdTs/categories) plus one `<category id>.json`
+  per exported category. No version, no infix, no suffix, and never a second file: all sister apps'
+  backups share one directory and must sort and read uniformly. v1 single-JSON exports still import,
+  and the "last exported" query still recognises their names.
+- **`shiroikuma.kakutoku.action.EXPORT_STATE` / `.LIST_CATEGORIES`** — an exported receiver with no
+  `android:permission` (the caller cannot hold one; the token is the gate). It holds the broadcast
+  open with `goAsync()`, boots the app's Dart code in a **headless `FlutterEngine`** (no Activity)
+  and drives the app's *own* export core, so the automated backup is a normal, restorable one and
+  the export logic exists exactly once.
+- **The reply is a fresh broadcast** carrying `FLAG_INCLUDE_STOPPED_PACKAGES` — never a
+  `ResultReceiver`, `PendingIntent` or `Messenger`, and never only the ordered-broadcast result
+  (EMUI drops live Binders into third-party manifest receivers and severs the ordered channel; the
+  ordered result is still set, as correct AOSP behaviour, but is never the reply). Exactly one
+  terminal reply per request, `AtomicBoolean`-guarded, with a watchdog so a wedged engine still
+  answers.
+- **Real numbers, never a percentage.** Progress broadcasts carry a display line plus structured
+  `current`/`total`/`unit` extras — `区分 3/5 — Sources (tracked apps)`, `アプリ 128/240`,
+  `フォント 2/5` — throttled to at most one every 500 ms with a forced final one at completion.
+- **Requests are honoured in full**: `items` selects a subset of categories by id (absent = all,
+  unknown ids rejected without writing anything), `path` overrides the configured export folder,
+  and `reply_id` is echoed back verbatim. The success reply is
+  `OK:<absolute path>|<bytes>|<human size>|<n> categories`; failures are distinct one-line reasons
+  (`automation disabled`, `bad token`, `no-directory`, `no-storage-access`, …).
+- **Automation switch + token**, appended directly below the existing export rows — not a section of
+  their own. The switch defaults **off**; the token is 24 bytes from the platform's cryptographic
+  RNG, hex-encoded, generated lazily so the row always shows a value, **compared in constant time**,
+  copied to the clipboard on tap, and re-issuable with a warning that pasted copies must be updated.
+  The whole `skAutomation*` prefs namespace is excluded from the settings dump, so the token can
+  never travel inside a backup.
+- `MANAGE_EXTERNAL_STORAGE` is declared so an absolute `path` can actually be written; turning the
+  switch on asks for All-files access. Without the grant the export falls back to the configured
+  SAF folder and the switch row says so in red.
+
+## 1.6.9+6
+
+Base: upstream Obtainium **1.6.9** (`versionCode` 2348). First public release of the fork.
+
+### Fork identity & packaging
+- Repackaged as **`shiroikuma.kakutoku`**, label **白い熊 獲得**, installable side-by-side with
+  Obtainium. Code namespace `dev.imranr.obtainium` and the Dart package `obtainium` are left
+  unchanged (only the installed application id differs), to keep upstream rebases clean.
+- Fork versioning from `fork.properties`: `VERSION_NAME`/`VERSION_CODE` track upstream;
+  `BUILD_NUMBER` is the fork increment. `versionName = "<VERSION_NAME>+<BUILD_NUMBER>"`,
+  `versionCode = VERSION_CODE * 10000 + BUILD_NUMBER` (→ `23480006` here).
+- `build-fork.sh` builds the signed release APK (normal flavour, arm64), names it
+  `shiroikuma-kakutoku_<version>_arm64-v8a.apk`, and bumps the build number. Signed with the fork's
+  own keystore.
+- Self-tracking retargeted: on first run the app adds **itself** (`shiroikuma.kakutoku`, author
+  白い熊) tracking this fork's GitHub releases; the app title, share subjects, in-app links
+  (welcome/Help), and export-schema messages all say 白い熊 獲得; all 29 translation locales
+  rebranded (values only — keys and formatting untouched).
+
+### Icon & branding
+- Black-yellow **traced Obtainium ribbon-arrow glyph** — yellow `#FFFF00` line-art on a black
+  adaptive-icon background — as the launcher icon (adaptive vector + monochrome, legacy mipmaps at
+  all densities, TV banner, in-app placeholder glyph, and the bundled master PNG/SVG).
+- Launcher glyph enlarged ~50% so it fills the icon.
+
+### 白い熊 獲得 UI — granular theming (new)
+- New **白い熊 獲得 UI** page reached from the top of Settings and by **long-pressing the main-screen
+  Settings cog**. Sister-repo house style: big bold underlined section headings, subgroups
+  underlined to text width, 40 dp indent per hierarchy level, tight single-line rows.
+- **Live preview everywhere** — the knob-driven theme restyles the whole app (and the page itself)
+  as you drag; changes persist immediately; one-tap reset to defaults in the page's top bar.
+- **12 colour slots** (background, surface, accent, on-accent, text, secondary text, border, icon,
+  top-bar background/foreground, action-button background/foreground) grouped under Foundation /
+  Text / Borders & icons / Top bar / Action button.
+- **RGBA colour picker**: four R/G/B/A sliders (0–255), old→new preview with a checkerboard behind
+  translucent colours and a hex readout, and one-click **recent-colour boxes** (10, shared across
+  every picker, persisted, prefilled with the house palette). Live while dragging; Cancel restores,
+  OK persists and remembers the colour.
+- **Size/shape sliders** with inline live previews: font size, font weight (100–900), corner
+  roundness (0–32 dp), border thickness (0–6 dp, 0 = none), icon size, and row density (0 =
+  tightest).
+- **External fonts**: import `.ttf`/`.otf` (copied into `files/fonts`), listed with **each entry
+  rendered in its own typeface** and a sample string, plus App-default / System / Monospace and
+  per-font delete; the choice is applied app-wide and persisted.
+- **Black-yellow defaults**: pure `#FFFF00` on `#000000` (never material `#FFEB3B`), yellow
+  borders/icons, covering app bars, cards, dialogs, inputs, switches, sliders, the FAB, search bar,
+  and menus.
+
+### Main-screen refinements
+- **Action buttons** (Add FAB, Update, per-app download): black fill, yellow text/icon, yellow
+  border — the new house default for the action-button colour knobs, with a one-time migration that
+  flips an already-saved yellow-fill state.
+- **Cog gesture**: tap opens Settings, long-press opens the 白い熊 獲得 UI page.
+- **Whitespace removed**: compact app bar (replacing the tall `SliverAppBar.large`), removed the
+  720 dp max-width body cap that left dead side margins, and trimmed card/search/banner side insets
+  to a 2 px gutter so app cards run nearly edge-to-edge.

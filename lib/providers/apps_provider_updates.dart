@@ -6,9 +6,30 @@ import 'package:obtainium/core/logging/app_logger.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/utils/update_health.dart';
 import 'package:obtainium/utils/min_update_age.dart';
+
+/// Whether a freshly fetched [newApp] counts as an update worth reporting
+/// (notifications, the post-check update list).
+///
+/// Normally that means the source moved: its latest version differs from what
+/// was recorded. A fork entry linked to a locally installed package instead
+/// asks whether the source is genuinely ahead of that local build, so
+/// rebuilding the fork silences the entry and a re-tagged or older release
+/// never raises one.
+///
+/// The unlinked path also honours upstream's downgrade gate, so a source that
+/// moved backwards does not raise a notification when "hide downgrades" is on.
+bool _isReportableUpdate(
+  App newApp,
+  App currentApp,
+  SettingsProvider settingsProvider,
+) => skLinkedPackage(newApp) != null
+    ? skIsOutdated(newApp)
+    : newApp.latestVersion != currentApp.latestVersion &&
+          isAppUpdateable(newApp, settingsProvider);
 
 /// Stamps when [newApp]'s latest version changed. With the
 /// `detectionDateAsReleaseDate` setting on, that time also stands in for the
@@ -246,8 +267,7 @@ extension AppsProviderUpdates on AppsProvider {
           if (newApp != null) {
             final isUpdate =
                 currentApp != null &&
-                newApp.latestVersion != currentApp.latestVersion &&
-                isAppUpdateable(newApp, settingsProvider);
+                _isReportableUpdate(newApp, currentApp, settingsProvider);
             return MapEntry(newApp, isUpdate);
           }
         } catch (e) {

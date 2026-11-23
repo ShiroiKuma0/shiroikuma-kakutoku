@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:app_links/app_links.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
 import 'package:obtainium/components/dcl_warning_dialog.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/components/ui_widgets.dart';
@@ -113,8 +113,10 @@ class _HomePageState extends State<HomePage> {
           children: [
             Text(tr('documentationLinksNote')),
             const LinkText(
-              text: 'https://github.com/ImranR98/Obtainium/blob/main/README.md',
-              url: 'https://github.com/ImranR98/Obtainium/blob/main/README.md',
+              text:
+                  'https://github.com/ShiroiKuma0/shiroikuma-kakutoku/blob/custom/README.md',
+              url:
+                  'https://github.com/ShiroiKuma0/shiroikuma-kakutoku/blob/custom/README.md',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ],
@@ -442,15 +444,9 @@ class _HomePageState extends State<HomePage> {
       },
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        body: useTwoPane
-            ? content
-            : Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
-                  child: content,
-                ),
-              ),
+        // Full width — no max-width centering (it left dead margins left and
+        // right on wide/unfolded screens).
+        body: content,
         floatingActionButton: useTwoPane ? null : fab,
       ),
     );

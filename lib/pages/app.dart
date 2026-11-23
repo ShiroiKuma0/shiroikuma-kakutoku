@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:obtainium/components/app_list_tile.dart';
@@ -10,11 +10,13 @@ import 'package:obtainium/pages/app_additional_options.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/components/app_detail_widgets.dart';
 import 'package:obtainium/theme.dart';
+import 'package:obtainium/components/sk_eximport.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/utils/format_utils.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/core/logging/app_logger.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/utils/update_health.dart';
 import 'package:obtainium/utils/locale_utils.dart';
@@ -252,6 +254,7 @@ class _AppPageState extends State<AppPage> {
     return Object.hashAll([
       identityHashCode(a.icon),
       identityHashCode(a.installedInfo),
+      identityHashCode(a.linkedInfo),
       app.id,
       a.name,
       a.author,
@@ -319,6 +322,24 @@ class _AppPageState extends State<AppPage> {
     }
   }
 
+  /// Fork: wave the current upstream version through — the maintainer pushed
+  /// something not worth rebasing and rebuilding for, and the entry should stop
+  /// showing an update until upstream moves on. A linked entry takes its
+  /// installed version from the local build, so this is recorded as a setting
+  /// rather than written into `installedVersion`, which the next load would
+  /// overwrite.
+  Future<void> setAsUpdated(AppInMemory app) async {
+    settingsProvider.selectionClick();
+    await appsProvider.saveApps([
+      app.app.copyWith(
+        additionalSettings: skSettingsWithSetUpdated(
+          app.app,
+          app.app.latestVersion,
+        ),
+      ),
+    ]);
+  }
+
   Future<Map<String, dynamic>?> showAdditionalOptionsDialog(
     BuildContext context,
     AppInMemory? app,
@@ -380,7 +401,13 @@ class _AppPageState extends State<AppPage> {
 
   void resetInstallStatus(AppInMemory? app) {
     if (app == null) return;
-    app.app = app.app.copyWith(installedVersion: null);
+    // Fork: a waved-through version is part of "this entry is current", so the
+    // reset undoes it too — otherwise a mis-tapped "set as updated" could never
+    // be taken back, the entry having gone up to date by that very mark.
+    app.app = app.app.copyWith(
+      installedVersion: null,
+      additionalSettings: skSettingsWithSetUpdated(app.app, null),
+    );
     unawaited(appsProvider.saveApps([app.app]));
   }
 
@@ -480,18 +507,30 @@ class _AppPageState extends State<AppPage> {
   Widget _getPrimaryButton(
     BuildContext context,
     AppInMemory? app,
-    bool areDownloadsRunning,
   ) {
     final installed = app?.app.installedVersion;
-    final latest = app?.app.latestVersion;
+    // Fork: only this app's own download blocks the button; other apps may be
+    // downloading or installing at the same time.
     final hasAction =
         app != null &&
         !updating &&
-        (installed == null || installed != latest) &&
-        !areDownloadsRunning;
+        (installed == null || skIsOutdated(app.app)) &&
+        !appsProvider.isAppObtaining(app.app.id);
     final trackOnly = app?.app.settings.getBool('trackOnly') == true;
+    // Fork: nothing here can install a linked entry — its APK is our own build
+    // of that source — so its button points at the rebase-and-build it needs
+    // instead of offering a "mark updated" the next save would undo.
+    final linkedPackage = app?.app != null ? skLinkedPackage(app!.app) : null;
     return FilledButton.icon(
-      onPressed: hasAction ? () => _handleInstallOrUpdate(context, app) : null,
+      onPressed: hasAction
+          ? (linkedPackage != null
+                ? () => showSkRebuildToUpdateDialog(
+                    context,
+                    linkedPackage: linkedPackage,
+                    latestVersion: skDisplayVersion(app.app.latestVersion),
+                  )
+                : () => _handleInstallOrUpdate(context, app))
+          : null,
       autofocus:
           hasAction &&
           widget.onClose == null &&
@@ -505,7 +544,11 @@ class _AppPageState extends State<AppPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            installed == null
+            // Short form: the full phrase is the dialog's own title, and this
+            // button shares its row with the refresh pill.
+            linkedPackage != null
+                ? tr('rebuildToUpdateShort')
+                : installed == null
                 ? (!trackOnly ? tr('install') : tr('markInstalled'))
                 : !trackOnly
                 ? tr('update')
@@ -587,20 +630,23 @@ class _AppPageState extends State<AppPage> {
           tooltip: tr('openReleasePage'),
           icon: const Icon(Icons.open_in_new),
         ),
-      if (app?.app.installedVersion != null &&
-          app?.app.installedVersion != app?.app.latestVersion &&
+      if (app != null &&
+          app.app.installedVersion != null &&
+          skIsOutdated(app.app) &&
+          skLinkedPackage(app.app) == null &&
           !isVersionDetectionStandard &&
           !trackOnly)
         IconButton(
-          onPressed: app?.downloadProgress != null || updating
+          onPressed: app.downloadProgress != null || updating
               ? null
               : () => showMarkUpdatedDialog(context),
           tooltip: tr('markUpdated'),
           icon: const Icon(Icons.done),
         ),
       if ((!isVersionDetectionStandard || trackOnly) &&
-          app?.app.installedVersion != null &&
-          app?.app.installedVersion == app?.app.latestVersion)
+          app != null &&
+          app.app.installedVersion != null &&
+          !skIsOutdated(app.app))
         IconButton(
           onPressed: updating
               ? null
@@ -764,10 +810,13 @@ class _AppPageState extends State<AppPage> {
 
   Widget _buildAppIcon(AppInMemory? app) {
     final icon = AppIcon(bytes: app?.icon, size: 56, radius: 14);
-    if (app == null || app.installedInfo == null) return icon;
+    // Fork: for a linked app this is the local build's icon, so tapping it
+    // opens that package rather than the (uninstalled) tracked one.
+    final openPackageId = app?.displayPackageId;
+    if (app == null || openPackageId == null) return icon;
     void openApp() {
       settingsProvider.lightImpact();
-      packageManager.openApp(app.app.id);
+      packageManager.openApp(openPackageId);
     }
 
     return AppIconAction(
@@ -813,21 +862,22 @@ class _AppPageState extends State<AppPage> {
     );
   }
 
-  String _installedVersionLabel(App? app) {
-    var label = appInstalledVersionText(app);
-    if (app?.installedVersion != app?.latestVersion) {
-      label += '\n${app?.latestVersion} ${tr('latest')}';
-    }
-    return label;
-  }
-
   List<Widget> _buildVersionInfoSections(AppInMemory? app) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final trackOnly = app?.app.settings.getBool('trackOnly') == true;
-    final pseudo = app?.app != null && isVersionPseudo(app!.app);
+    final linkedPackage = app?.app != null ? skLinkedPackage(app!.app) : null;
+    final linkedRawVersion = app?.linkedInfo?.versionName;
+    final pseudo =
+        app?.app != null && isVersionPseudo(app!.app) && linkedPackage == null;
+    final realVersion = app?.installedInfo?.versionName;
     final apkCount = app?.app.apkUrls.length ?? 0;
     final changeLogFn = app != null ? getChangeLogFn(context, app.app) : null;
+    // Fork: an entry waved through with "set as updated" reads as current
+    // while its build is demonstrably behind — this says why, and at what.
+    final setUpdatedAt = app != null && skIsSetUpdated(app.app)
+        ? skDisplayVersion(app.app.latestVersion)
+        : null;
     final appData = app?.app;
     final UpdateHealthConfig? updateHealthConfig =
         appData == null || appData.disabled
@@ -846,12 +896,44 @@ class _AppPageState extends State<AppPage> {
         true,
         false,
         children: [
-          if (trackOnly) _detailNote(tr('xIsTrackOnly', args: [tr('app')])),
-          if (pseudo) _detailNote(tr('pseudoVersionInUse')),
-          Text(
-            _installedVersionLabel(app?.app),
-            style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
+          if (trackOnly && linkedPackage == null)
+            _detailNote(tr('xIsTrackOnly', args: [tr('app')])),
+          if (linkedPackage != null)
+            _detailNote(
+              linkedRawVersion != null
+                  ? tr(
+                      'linkedVersionNote',
+                      args: [
+                        linkedPackage,
+                        skDisplayVersion(linkedRawVersion),
+                        skDisplayVersionOrNull(
+                              skStripVersion(linkedRawVersion, app!.app),
+                            ) ??
+                            '',
+                      ],
+                    )
+                  : tr('linkedAppNotInstalled', args: [linkedPackage]),
+            ),
+          if (setUpdatedAt != null)
+            _detailNote(tr('setAsUpdatedNote', args: [setUpdatedAt])),
+          if (pseudo)
+            _detailNote(
+              realVersion != null
+                  ? '${tr('pseudoVersionInUse')} (OS installed ${skDisplayVersion(realVersion)})'
+                  : tr('pseudoVersionInUse'),
+            ),
+          () {
+            String l = appInstalledVersionText(app?.app);
+            final upToDate = app == null || !skIsOutdated(app.app);
+            if (!upToDate) {
+              l +=
+                  '\n${skDisplayVersion(app.app.latestVersion)} ${tr('latest')}';
+            }
+            return Text(
+              l,
+              style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+            );
+          }(),
           if (apkCount > 0)
             _detailNote(
               apkCount == 1 ? app!.app.apkUrls[0].key : plural('apk', apkCount),
@@ -1132,33 +1214,45 @@ class _AppPageState extends State<AppPage> {
     bool showAppWebpageFinal,
     bool isVersionDetectionStandard,
     bool trackOnly,
-    bool areDownloadsRunning,
   ) {
+    final progress = app?.downloadProgress;
+    // Fork: queued = waiting for a download slot or for the install lock.
+    final queued = progress == queuedProgressSentinel;
+    final downloading = progress != null && progress >= 0;
+    // Fork: whether this entry gets the "set as updated" button — decided by
+    // the entry alone, so a refresh or a download does not reshuffle the row
+    // under 白い熊's finger; while one runs the button is merely disabled.
+    final showSetUpdated = app != null && skCanSetUpdated(app.app);
+    final canSetUpdated = showSetUpdated && !updating && progress == null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (app?.downloadProgress != null)
+        if (progress != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
                 Expanded(
                   child: Semantics(
-                    label: app!.downloadProgress! >= 0
+                    label: downloading
                         ? tr(
                             'percentProgress',
-                            args: [app.downloadProgress!.toInt().toString()],
+                            args: [progress.toInt().toString()],
                           )
+                        : queued
+                        ? tr('queued')
                         : tr('installing'),
                     child: LinearProgressIndicator(
-                      value: app.downloadProgress! >= 0
-                          ? app.downloadProgress! / 100
+                      value: downloading
+                          ? progress / 100
+                          : queued
+                          ? 0
                           : null,
                     ),
                   ),
                 ),
-                if (app.downloadProgress! >= 0) ...[
+                if (downloading) ...[
                   const SizedBox(width: AppSpacings.elementGap),
                   DownloadCancelButton(
                     onPressed: () => appsProvider.cancelDownload(widget.appId),
@@ -1167,9 +1261,7 @@ class _AppPageState extends State<AppPage> {
               ],
             ),
           ),
-        if (app?.downloadProgress != null &&
-            app!.downloadProgress! >= 0 &&
-            app.downloadReceivedBytes != null)
+        if (downloading && app!.downloadReceivedBytes != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
@@ -1182,27 +1274,74 @@ class _AppPageState extends State<AppPage> {
           ),
         Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _getSecondaryActions(
-                      context,
-                      app,
-                      source,
-                      appsProvider,
-                      settingsProvider,
-                      showAppWebpageFinal,
-                      isVersionDetectionStandard,
-                      trackOnly,
+              Row(
+                children: [
+                  // Fork: the icon actions give way first — the refresh pill and
+                  // the primary button keep their full width on a narrow screen.
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _getSecondaryActions(
+                          context,
+                          app,
+                          source,
+                          appsProvider,
+                          settingsProvider,
+                          showAppWebpageFinal,
+                          isVersionDetectionStandard,
+                          trackOnly,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  // Fork: re-check this one app's source on demand, without
+                  // going back to the list and refreshing every app.
+                  SkPillButton(
+                    tr('refreshFromUpstream'),
+                    onPressed: app == null || updating || progress != null
+                        ? null
+                        : () {
+                            settingsProvider.selectionClick();
+                            unawaited(getUpdate(context));
+                          },
+                  ),
+                  // Fork: an entry that can be waved through needs a third
+                  // button, and no phone-width row fits all three — those two
+                  // take the row below, leaving the refresh pill up here.
+                  if (!showSetUpdated) ...[
+                    const SizedBox(width: 8),
+                    _getPrimaryButton(context, app),
+                  ],
+                ],
               ),
-              const SizedBox(width: AppSpacings.elementGap),
-              _getPrimaryButton(context, app, areDownloadsRunning),
+              if (showSetUpdated) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: canSetUpdated
+                            ? () => unawaited(setAsUpdated(app))
+                            : null,
+                        icon: const Icon(Icons.done_rounded),
+                        label: Text(
+                          tr('setAsUpdated'),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _getPrimaryButton(context, app),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -1232,13 +1371,16 @@ class _AppPageState extends State<AppPage> {
     final AppInMemory? app = cachedApp(
       context.select<AppsProvider, AppInMemory?>((p) => p.apps[widget.appId]),
     );
+    final installed = app?.app.installedVersion;
     if (app != null &&
         shouldProbeDownloadSize(
           checkUpdateOnDetailPage: settingsProvider.checkUpdateOnDetailPage,
           hasDownload: app.downloadProgress != null,
           updating: updating,
           areDownloadsRunning: areDownloadsRunning,
-        )) {
+        ) &&
+        // Fork: a size is only worth probing for a download on offer.
+        (installed == null || skIsOutdated(app.app))) {
       // Probe from a post-frame callback: build must stay side-effect free, and
       // the key guard inside makes repeat scheduling a cheap no-op.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1286,73 +1428,101 @@ class _AppPageState extends State<AppPage> {
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: showAppWebpageFinal
           ? _getAppWebView(context, app)
-          : Column(
+          : Stack(
               children: [
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () async {
-                      if (app != null) {
-                        if (app.app.disabled) {
-                          showMessage(tr('appDisabledNoUpdateCheck'), context);
-                          return;
-                        }
-                        await getUpdate(context);
-                      }
-                    },
-                    child: CustomScrollView(
-                      slivers: [
-                        const SliverToBoxAdapter(
-                          child: SizedBox(height: AppSpacings.sm),
+                Column(
+                  children: [
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: () async {
+                          if (app != null) {
+                            if (app.app.disabled) {
+                              showMessage(
+                                tr('appDisabledNoUpdateCheck'),
+                                context,
+                              );
+                              return;
+                            }
+                            await getUpdate(context);
+                          }
+                        },
+                        child: CustomScrollView(
+                          // Fork: the page is short enough to fit on
+                          // screen, and a scroll view that cannot
+                          // overscroll never hands the pull to the
+                          // RefreshIndicator — this is what makes
+                          // pull-down refresh work here at all.
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: AppSpacings.sm),
+                            ),
+                            _buildHeaderSection(app),
+                            ..._buildRepoRenameSection(app, appsProvider),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: AppSpacings.sectionGap),
+                            ),
+                            ..._buildVersionInfoSections(app),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: AppSpacings.sectionGap),
+                            ),
+                            ..._buildSourceInfoSections(
+                              app,
+                              appsProvider,
+                              certs,
+                              hasAssets,
+                            ),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: AppSpacings.sectionGap),
+                            ),
+                            _buildCategorySection(app, appsProvider),
+                            ..._buildAboutSection(app),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 32),
+                            ),
+                          ],
                         ),
-                        _buildHeaderSection(app),
-                        ..._buildRepoRenameSection(app, appsProvider),
-                        const SliverToBoxAdapter(
-                          child: SizedBox(height: AppSpacings.sectionGap),
-                        ),
-                        ..._buildVersionInfoSections(app),
-                        const SliverToBoxAdapter(
-                          child: SizedBox(height: AppSpacings.sectionGap),
-                        ),
-                        ..._buildSourceInfoSections(
-                          app,
-                          appsProvider,
-                          certs,
-                          hasAssets,
-                        ),
-                        const SliverToBoxAdapter(
-                          child: SizedBox(height: AppSpacings.sectionGap),
-                        ),
-                        _buildCategorySection(app, appsProvider),
-                        ..._buildAboutSection(app),
-                        const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                    border: Border(
-                      top: BorderSide(
-                        color: Theme.of(context).colorScheme.outlineVariant,
                       ),
                     ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  child: SafeArea(
-                    top: false,
-                    child: _buildActionsContent(
-                      app,
-                      appsProvider,
-                      settingsProvider,
-                      source,
-                      showAppWebpageFinal,
-                      isVersionDetectionStandard,
-                      trackOnly,
-                      areDownloadsRunning,
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHigh,
+                        border: Border(
+                          top: BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                      ),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      child: SafeArea(
+                        top: false,
+                        child: _buildActionsContent(
+                          app,
+                          appsProvider,
+                          settingsProvider,
+                          source,
+                          showAppWebpageFinal,
+                          isVersionDetectionStandard,
+                          trackOnly,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                // Fork: the running line the main window shows while it
+                // refreshes, pinned just below the top bar so a pull-down
+                // (or the refresh pill) reports itself the same way here.
+                if (updating)
+                  const Positioned(
+                    top: 2,
+                    left: 32,
+                    right: 32,
+                    child: IgnorePointer(
+                      child: LinearProgressIndicator(),
                     ),
                   ),
-                ),
               ],
             ),
     );

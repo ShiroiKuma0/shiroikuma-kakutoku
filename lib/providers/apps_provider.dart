@@ -13,11 +13,12 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:crypto/crypto.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/core/logging/app_logger.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_fgbg/flutter_fgbg.dart';
 import 'package:obtainium/providers/source_provider.dart';
@@ -56,8 +57,16 @@ const int _bgClientExceptionRetryWaitSeconds = 15 * 60;
 final packageManager = AndroidPackageManager();
 final packageInfoFlags = PackageInfoFlags({PMFlag.getSigningCertificates});
 
+/// Fork: how many app downloads may run at once. Further ones queue.
+const int maxConcurrentDownloads = 3;
+
+/// Fork: [AppInMemory.downloadProgress] sentinel meaning "waiting its turn" —
+/// for a download slot or for the install lock — with no percentage to show.
+const double queuedProgressSentinel = -2;
+
 /// Live download state for an app: the progress percent (listenable, with -1
-/// meaning "installing" and null meaning "idle") plus the bytes downloaded and
+/// meaning "installing", [queuedProgressSentinel] meaning "queued" and null
+/// meaning "idle") plus the bytes downloaded and
 /// total size when known. Held by reference and shared across [AppInMemory]
 /// copies so UI listeners bound to an earlier instance keep updating even after
 /// saveApps replaces the map entry with a copy.
@@ -67,11 +76,23 @@ class DownloadState {
   int? totalBytes;
 }
 
+/// Sentinel for [AppInMemory.copyWith]'s `linkedInfo`, so an explicit null
+/// (link removed) is not confused with "not provided".
+const Object _unsetLinkedInfo = Object();
+
 /// Runtime wrapper for [App] holding download state and OS package info.
 class AppInMemory {
   late App app;
   final DownloadState download;
   PackageInfo? installedInfo;
+
+  /// Fork: OS info of the package this app is linked to for version
+  /// comparison (see sk_linked_version.dart). Null unless a link is set and
+  /// that package is installed.
+  PackageInfo? linkedInfo;
+
+  /// Fork: launcher label of [linkedInfo], shown after the source's own name.
+  String? linkedLabel;
   Uint8List? icon;
   String? sourceType;
 
@@ -92,6 +113,8 @@ class AppInMemory {
     this.installedInfo,
     this.icon, {
     this.sourceType,
+    this.linkedInfo,
+    this.linkedLabel,
     DownloadState? download,
   }) : download =
            download ?? (DownloadState()..progress.value = downloadProgress);
@@ -102,25 +125,56 @@ class AppInMemory {
     installedInfo,
     icon,
     sourceType: sourceType,
+    linkedInfo: linkedInfo,
+    linkedLabel: linkedLabel,
     download: download,
   );
 
+  /// [linkedInfo] uses a sentinel rather than `??` so that clearing a removed
+  /// link (passing null) is distinguishable from leaving it untouched.
   AppInMemory copyWith({
     App? app,
     PackageInfo? installedInfo,
     Uint8List? icon,
     String? sourceType,
+    Object? linkedInfo = _unsetLinkedInfo,
+    Object? linkedLabel = _unsetLinkedInfo,
   }) => AppInMemory(
     app ?? this.app,
     downloadProgress,
     installedInfo ?? this.installedInfo,
     icon ?? this.icon,
     sourceType: sourceType ?? this.sourceType,
+    linkedInfo: identical(linkedInfo, _unsetLinkedInfo)
+        ? this.linkedInfo
+        : linkedInfo as PackageInfo?,
+    linkedLabel: identical(linkedLabel, _unsetLinkedInfo)
+        ? this.linkedLabel
+        : linkedLabel as String?,
     download: download,
   );
 
-  String get name => app.finalName;
+  /// Fork: the title an entry composes for itself. A linked app reads
+  /// `<local build> ⇒ <source app>`, e.g. "白い熊 獲得 ⇒ Obtainium" — ours
+  /// first, since the entry is about our build, and the arrow points at the
+  /// upstream it is measured against.
+  String get autoName => linkedLabel != null && linkedLabel!.isNotEmpty
+      ? '$linkedLabel $skLinkArrow ${app.finalName}'
+      : app.finalName;
+
+  /// Fork: a title set by hand (the Title setting) is the WHOLE title, never
+  /// one half of a composed one — two entries tracking sibling repos of the
+  /// same project are told apart by exactly this.
+  String get name => app.overrideName ?? autoName;
   String get author => app.finalAuthor;
+
+  /// Fork: one of our own builds, by the label it shows under.
+  bool get isOurs => name.trimLeft().startsWith(skOurNamePrefix);
+
+  /// Fork: the package the icon represents and opens on tap — the app's own
+  /// when installed, otherwise the linked local build.
+  String? get displayPackageId =>
+      installedInfo != null ? app.id : linkedInfo?.packageName;
 
   bool get needsRefreshBeforeDownload =>
       app.settings.getBool('refreshBeforeDownload') ||
@@ -871,6 +925,78 @@ class AppsProvider with ChangeNotifier {
       entry.downloadProgress = null;
     }
     notify();
+  }
+
+  // Fork: concurrent obtain pipeline.
+  //
+  // Several apps may be downloading at once — from separate per-app taps, a
+  // bulk run, or both overlapping. Installing, however, is exclusive: the
+  // platform installer shows one prompt at a time, and the stock installer
+  // additionally waits for the user to return to the foreground. Downloads
+  // therefore pass through a small semaphore, installs through a single lock.
+
+  /// App IDs currently somewhere in the download → install pipeline. A second
+  /// request for the same app (double tap, swipe, overlapping bulk run) is
+  /// dropped rather than downloaded twice.
+  final Set<String> appsInObtainPipeline = {};
+
+  /// Whether [appId] is already downloading, queued, or installing, and so
+  /// must not be started again. Unlike [areDownloadsRunning] this says nothing
+  /// about *other* apps — those may run concurrently.
+  bool isAppObtaining(String appId) =>
+      appsInObtainPipeline.contains(appId) ||
+      apps[appId]?.downloadProgress != null;
+
+  int _activeDownloads = 0;
+  final List<Completer<void>> _downloadSlotQueue = [];
+  Future<void> _installLock = Future<void>.value();
+  int _installQueueDepth = 0;
+
+  /// Waits for a free download slot. Every call must be paired with a
+  /// [releaseDownloadSlot] in a `finally`.
+  Future<void> acquireDownloadSlot() async {
+    if (_activeDownloads < maxConcurrentDownloads) {
+      _activeDownloads++;
+      return;
+    }
+    final waiter = Completer<void>();
+    _downloadSlotQueue.add(waiter);
+    // The releasing download hands its slot straight over, so the count stays
+    // as-is rather than being decremented and re-incremented.
+    await waiter.future;
+  }
+
+  void releaseDownloadSlot() {
+    if (_downloadSlotQueue.isNotEmpty) {
+      _downloadSlotQueue.removeAt(0).complete();
+    } else if (_activeDownloads > 0) {
+      _activeDownloads--;
+    }
+  }
+
+  /// Runs [action] holding the global install lock, so only one install — and
+  /// only one install prompt — is ever live. [onQueued] fires when the caller
+  /// actually has to wait for its turn, [onAcquired] when it gets it.
+  Future<T> withInstallLock<T>(
+    Future<T> Function() action, {
+    void Function()? onQueued,
+    void Function()? onAcquired,
+  }) async {
+    final previous = _installLock;
+    final release = Completer<void>();
+    _installLock = release.future;
+    final mustWait = _installQueueDepth > 0;
+    _installQueueDepth++;
+    if (mustWait) onQueued?.call();
+    try {
+      // Never completed with an error, so this cannot break the chain.
+      await previous;
+      if (mustWait) onAcquired?.call();
+      return await action();
+    } finally {
+      _installQueueDepth--;
+      release.complete();
+    }
   }
 
   /// Waits for any in-flight [loadApps] to finish, so concurrent callers

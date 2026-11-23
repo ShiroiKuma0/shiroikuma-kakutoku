@@ -106,6 +106,11 @@ abstract class AppSource {
     return app;
   }
 
+  /// Whether apps from this source must be track-only. Sources that decide it
+  /// per app (GitHub's commit tracking, which yields no APKs) override this.
+  bool enforceTrackOnlyFor(Map<String, dynamic> additionalSettings) =>
+      enforceTrackOnly;
+
   Future<Map<String, dynamic>> buildMergedSettings(
     Map<String, dynamic> additionalSettings,
     SettingsProvider settingsProvider,
@@ -362,6 +367,33 @@ abstract class AppSource {
 
   List<List<GeneratedFormItem>> get _appAppSettingFormItems => [
     [GeneratedFormSwitch('trackOnly', label: tr('trackOnly'))],
+    // Fork: monitor an upstream source but compare against the local build of
+    // it (our fork APK) — see lib/providers/sk_linked_version.dart. The App
+    // page fills in the picker button and the autocomplete list.
+    [
+      GeneratedFormTextField(
+        'linkedInstalledPackage',
+        label: tr('linkedInstalledApp'),
+        required: false,
+        hint: tr('notLinked'),
+      ),
+    ],
+    [
+      GeneratedFormTextField(
+        'linkedVersionStripRegEx',
+        label: tr('linkedVersionStripRegEx'),
+        required: false,
+        hint: r'\+\d+$',
+        additionalValidators: [(value) => regExValidator(value)],
+      ),
+    ],
+    [
+      GeneratedFormSwitch(
+        'updateOnlyIfNewer',
+        label: tr('updateOnlyIfNewer'),
+        value: true,
+      ),
+    ],
     [GeneratedFormTextField('appName', label: tr('appName'), required: false)],
     [GeneratedFormTextField('appAuthor', label: tr('author'), required: false)],
     [
@@ -513,7 +545,7 @@ abstract class AppSource {
       }
     }
 
-    return [
+    final all = [
       // Clone so callers (e.g. the add-app form pre-filling default values)
       // can't mutate the source-owned items. Sources are now cached/shared, so
       // an in-place edit here would otherwise leak across apps.
@@ -542,6 +574,18 @@ abstract class AppSource {
       ],
       ...updateHealthOverrideFormItems(),
     ];
+
+    // Fork: the title an entry is listed under is the field most often edited
+    // here — two entries tracking sibling repos of one project are told apart
+    // by nothing else — so it leads the page instead of sitting below a source's
+    // own switches.
+    final titleIdx = all.indexWhere(
+      (row) => row.any((item) => item.key == 'appName'),
+    );
+    if (titleIdx > 0) {
+      all.insert(0, all.removeAt(titleIdx));
+    }
+    return all;
   }
 
   bool get hasAppSpecificSettings =>

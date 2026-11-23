@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/components/sk_pills.dart';
 import 'package:flutter/services.dart';
 import 'package:obtainium/theme.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
@@ -337,6 +338,40 @@ class _TvDropdownOptionsDialog<T> extends StatelessWidget {
   }
 }
 
+/// Fork: an entry compared against a local build cannot be updated from here —
+/// its APK comes from our own build of that source. Says what to do instead,
+/// naming both the fork to rebase and the upstream version to rebase onto.
+void showSkRebuildToUpdateDialog(
+  BuildContext context, {
+  required String linkedPackage,
+  required String latestVersion,
+}) {
+  final settingsProvider = context.read<SettingsProvider>();
+  settingsProvider.selectionClick();
+  unawaited(
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: Text(tr('rebuildToUpdate')),
+        content: Text(
+          tr(
+            'rebuildToUpdateExplanation',
+            args: [linkedPackage, latestVersion],
+          ),
+        ),
+        actions: [
+          FilledButton.tonal(
+            autofocus: settingsProvider.isTV,
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(tr('ok')),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class AppIcon extends StatelessWidget {
   final Uint8List? bytes;
   final double size;
@@ -642,7 +677,8 @@ class ActionListTile extends StatelessWidget {
     return TvFocusRing(
       borderRadius: borderRadius?.topLeft.x ?? connectedTileBigRadius,
       child: ListTile(
-        leading: Icon(icon),
+        // Fork: coloured by what the row does.
+        leading: SkRoleIcon(icon),
         title: Text(label),
         trailing: trailing,
         enabled: onTap != null,
@@ -905,6 +941,9 @@ class ToggleTile extends StatelessWidget {
     return TvFocusRing(
       child: ListTile(
         contentPadding: noPadding ? EdgeInsets.zero : AppPaddings.rowHorizontal,
+        // Fork: a switch that cannot be flipped says so with its whole row, not
+        // just with a greyed-out thumb at the far end of it.
+        enabled: onChanged != null,
         title: Text(label),
         subtitle: subtitle,
         trailing: Row(

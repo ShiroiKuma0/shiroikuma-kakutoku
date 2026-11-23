@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/components/sk_pills.dart';
+import 'package:obtainium/providers/sk_ui_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/components/generated_form_model.dart';
@@ -176,6 +178,14 @@ class _GeneratedFormState extends State<GeneratedForm> {
       suffixIconConstraints: widget.tileMode
           ? const BoxConstraints(minWidth: 0, minHeight: 0)
           : null,
+      // Fork: in tile mode the field paints its own background, in the same
+      // shape as its outline. It used to sit inside a tile card whose clip
+      // (radius 24 at the ends of a run) cut the corners off that outline,
+      // leaving the border broken at the left and right of single-row forms.
+      filled: widget.tileMode,
+      fillColor: widget.tileMode
+          ? Theme.of(context).colorScheme.surfaceContainerHighest
+          : null,
     );
   }
 
@@ -248,7 +258,9 @@ class _GeneratedFormState extends State<GeneratedForm> {
             labelText: tr(formItem.label) + (formItem.required ? ' *' : ''),
             hintText: formItem.hint,
             suffixIcon:
-                formItem.suffixIcon ?? _buildHelpSuffixIcon(formItem.helpUrl),
+                formItem.trailing ??
+                formItem.suffixIcon ??
+                _buildHelpSuffixIcon(formItem.helpUrl),
           ),
           minLines: formItem.max <= 1 ? null : formItem.max,
           maxLines: formItem.max <= 1 ? 1 : formItem.max,
@@ -362,7 +374,17 @@ class _GeneratedFormState extends State<GeneratedForm> {
   /// field controllers must be re-initialized after a widget update.
   int _itemsSignature(List<List<GeneratedFormItem>> items) {
     return Object.hashAll(
-      items.expand((row) => row.map((e) => Object.hash(e.key, e.runtimeType))),
+      items.expand(
+        (row) => row.map(
+          (e) => Object.hash(
+            e.key,
+            e.runtimeType,
+            // Fork: a moved trailingKey re-initialises the field (see
+            // GeneratedFormTextField.trailingKey).
+            e is GeneratedFormTextField ? e.trailingKey : null,
+          ),
+        ),
+      ),
     );
   }
 
@@ -633,15 +655,26 @@ class _GeneratedFormState extends State<GeneratedForm> {
     if (item is GeneratedFormDropdown) return _buildDropdown(item);
     if (item is GeneratedFormSlider) return _buildSlider(item);
     if (item is GeneratedFormSwitch) {
+      // Fork: a switch that a currently-on switch declares it disables is
+      // inert while that one is on — the setting that wins says so on
+      // screen, instead of being silently undone by a later flip here.
+      final inert =
+          item.disabled || item.disabledBy.any((key) => values[key] == true);
       return ToggleTile(
         label: tr(item.label),
         value: values[item.key] as bool,
         noPadding: widget.noTilePadding,
-        onChanged: item.disabled
+        onChanged: inert
             ? null
             : hapticSwitchOnChanged(context, (value) {
                 setState(() {
                   values[item.key] = value;
+                  // Fork: switching one on releases whatever it excludes.
+                  if (value) {
+                    for (final key in item.excludes) {
+                      values[key] = false;
+                    }
+                  }
                   if (value) {
                     for (final key in item.mutuallyExclusiveWith) {
                       if (values[key] is bool) values[key] = false;
@@ -703,24 +736,29 @@ class _GeneratedFormState extends State<GeneratedForm> {
           widget.items[r][0] is GeneratedFormHeader;
       final colorScheme = Theme.of(context).colorScheme;
       final n = inputRowWidgets.length;
+      // Fork: only non-field rows get a tile card — a field draws its own
+      // outline and fill (see _fieldDecoration), and a card around it would
+      // clip that outline's corners. Runs of cards therefore round off
+      // wherever a field (or sub-form) interrupts them, not just at the ends.
+      // Upstream's section headers are no cards either, and end a run.
+      bool isCardRow(int r) =>
+          !isSubFormRow(r) && !isFieldRow(r) && !isHeaderRow(r);
       final List<Widget> rawTiles = [];
       for (var r = 0; r < n; r++) {
-        if (isSubFormRow(r) || isHeaderRow(r)) {
+        if (!isCardRow(r)) {
           rawTiles.add(inputRowWidgets[r]);
-        } else {
-          rawTiles.add(
-            ConnectedCard(
-              isFirst: widget.joinedTiles ? r == 0 || isHeaderRow(r - 1) : true,
-              isLast: widget.joinedTiles
-                  ? r == n - 1 || isHeaderRow(r + 1)
-                  : true,
-              color: isFieldRow(r)
-                  ? colorScheme.surfaceContainerHighest
-                  : colorScheme.surfaceContainerLow,
-              child: inputRowWidgets[r],
-            ),
-          );
+          continue;
         }
+        rawTiles.add(
+          ConnectedCard(
+            isFirst: widget.joinedTiles ? r == 0 || !isCardRow(r - 1) : true,
+            isLast: widget.joinedTiles
+                ? r == n - 1 || !isCardRow(r + 1)
+                : true,
+            color: colorScheme.surfaceContainerLow,
+            child: inputRowWidgets[r],
+          ),
+        );
       }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -867,6 +905,9 @@ class GeneratedFormModal extends StatefulWidget {
     this.additionalWidgets = const [],
     this.singleNullReturnButton,
     this.primaryActionColour,
+    this.primaryActionTextColour,
+    this.primaryActionText,
+    this.primaryActionFirst = false,
     this.tileMode = false,
     this.onValueChanges,
   });
@@ -878,6 +919,17 @@ class GeneratedFormModal extends StatefulWidget {
   final List<Widget> additionalWidgets;
   final String? singleNullReturnButton;
   final Color? primaryActionColour;
+
+  /// Fork: label colour of the primary action, when [primaryActionColour] is
+  /// set. Defaults to the theme's onError.
+  final Color? primaryActionTextColour;
+
+  /// Fork: primary action label. Defaults to "continue".
+  final String? primaryActionText;
+
+  /// Fork: puts the primary action to the left of the cancel button, for
+  /// destructive dialogs where it should be the harder one to hit by reflex.
+  final bool primaryActionFirst;
   final bool tileMode;
 
   /// Called in addition to the modal's own state tracking, e.g. so callers
@@ -902,6 +954,11 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
   Widget build(BuildContext context) {
     return AlertDialog(
       scrollable: true,
+      // Fork: a primary-first (destructive) dialog splits its buttons to the
+      // two edges, so the destructive one is nowhere near the reflex tap.
+      actionsAlignment: widget.primaryActionFirst
+          ? MainAxisAlignment.spaceBetween
+          : null,
       title: Text(widget.title),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -928,9 +985,23 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
           if (widget.additionalWidgets.isNotEmpty) ...widget.additionalWidgets,
         ],
       ),
-      actions: [
-        TextButton(
+      actions: () {
+        // Fork: the border filled buttons carry in this theme (accent colour,
+        // knob-driven width), reused so both dialog buttons are outlined alike.
+        final themeSide = Theme.of(
+          context,
+        ).filledButtonTheme.style?.side?.resolve(const <WidgetState>{});
+        final cancelSide =
+            themeSide ??
+            BorderSide(color: Theme.of(context).colorScheme.outline, width: 1.5);
+        final cancelButton = TextButton(
           autofocus: context.read<SettingsProvider>().isTV,
+          // Only the primary-first (destructive) layout outlines its cancel
+          // button — there the primary is red, so cancel carries the accent.
+          style:
+              widget.primaryActionFirst && SkPalette.maybeOf(context) == null
+              ? TextButton.styleFrom(side: cancelSide)
+              : null,
           onPressed: () {
             Navigator.of(context).pop(null);
           },
@@ -939,14 +1010,25 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
                 ? tr('cancel')
                 : widget.singleNullReturnButton!,
           ),
-        ),
-        widget.singleNullReturnButton == null
+        );
+        final primaryButton = widget.singleNullReturnButton == null
             ? FilledButton(
                 style: widget.primaryActionColour == null
                     ? null
-                    : FilledButton.styleFrom(
+                    // Under the 白い熊 獲得 UI a coloured primary action is
+                    // the deleting one: the delete red on frame and label,
+                    // never a fill.
+                    : skDeletePill(context, main: true) ??
+                          FilledButton.styleFrom(
                         backgroundColor: widget.primaryActionColour,
-                        foregroundColor: Theme.of(context).colorScheme.onError,
+                        foregroundColor:
+                            widget.primaryActionTextColour ??
+                            Theme.of(context).colorScheme.onError,
+                        // Border in the button's own colour, not the accent.
+                        side: BorderSide(
+                          color: widget.primaryActionColour!,
+                          width: themeSide?.width ?? 1.5,
+                        ),
                       ),
                 onPressed: !valid
                     ? null
@@ -954,10 +1036,13 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
                         context.read<SettingsProvider>().selectionClick();
                         Navigator.of(context).pop(values);
                       },
-                child: Text(tr('continue')),
+                child: Text(widget.primaryActionText ?? tr('continue')),
               )
-            : const SizedBox.shrink(),
-      ],
+            : const SizedBox.shrink();
+        return widget.primaryActionFirst
+            ? [primaryButton, cancelButton]
+            : [cancelButton, primaryButton];
+      }(),
     );
   }
 }
