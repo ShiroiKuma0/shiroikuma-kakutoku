@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/providers/sk_ui_provider.dart';
+import 'package:obtainium/sk_theme.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -282,8 +284,9 @@ class AppListTile extends StatelessWidget {
                   if (context.mounted) showError(e, context);
                 });
           };
-    // Per-app download/update button: black fill, accent (yellow) icon +
-    // border — the house action-button look.
+    // Per-app download/update button: an outlined ring, never filled, its
+    // glyph coloured by what it does (it installs: the call role).
+    final sk = SkPalette.maybeOf(context);
     return IconButton.filled(
       onPressed: onPressed,
       tooltip: linkedPackage != null
@@ -292,14 +295,19 @@ class AppListTile extends StatelessWidget {
           ? tr('markUpdated')
           : tr('update'),
       style: IconButton.styleFrom(
-        backgroundColor: cs.surface,
-        foregroundColor: cs.primary,
-        side: BorderSide(color: cs.primary, width: 1.5),
+        backgroundColor: sk?[SkRole.buttonGround] ?? cs.surface,
+        foregroundColor: sk?.icon(SkIconRole.call) ?? cs.primary,
+        side: BorderSide(
+          color: sk?[SkRole.buttonFrame] ?? cs.primary,
+          width: sk != null ? skPillRegularWidth : 1.5,
+        ),
         disabledForegroundColor: cs.onSurface.withValues(alpha: 0.38),
         visualDensity: VisualDensity.compact,
-        shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: sk != null
+            ? const CircleBorder()
+            : RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
       ),
       // Fork: a linked entry wears the same download arrow as any other app
       // with an update — it is the same news, whoever ends up building it.

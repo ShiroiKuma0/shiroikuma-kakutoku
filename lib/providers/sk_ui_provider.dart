@@ -6,21 +6,18 @@
 // as one-click presets. External fonts are copied into
 // <app documents>/sk_fonts/ and loaded as font families named after the file.
 
+export 'package:obtainium/providers/sk_roles.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/providers/sk_roles.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// The house palette (same yellow as the launcher icon trace — NOT material
-/// yellow #FFEB3B).
-const Color skYellow = Color(0xFFFFFF00);
-const Color skBlack = Color(0xFF000000);
-const Color skDimYellow = Color(0xFFB8B800);
-const Color skDarkSurface = Color(0xFF0A0A00);
 
 /// Current defaults revision. Bump when a shipped default changes and old
 /// saved states should be migrated (see [SkUiProvider.initialize]).
@@ -31,7 +28,8 @@ class SkUiKnobs {
   // Master switch.
   bool enabled;
 
-  // Colors — background.
+  // Colors — the twelve foundation colours (SkBase); every role defaults
+  // to one of them or to a mix of two.
   Color background;
   Color surface;
   // Colors — text.
@@ -69,22 +67,30 @@ class SkUiKnobs {
   // Density.
   double rowSpacing; // vertical list-row padding, 0 .. 16
 
+  // Colours of single items: a role's name → ARGB. A role that is not in
+  // here shows its default (see sk_roles.dart).
+  Map<String, int> roles;
+
+  // The UI page's arrangement: section order (names of SkSection) and the
+  // sections that are unfolded. Stored with the knobs so they travel in the
+  // export with the colours and fonts.
+  List<String> sectionOrder;
+  List<String> sectionsOpen;
+
   SkUiKnobs({
     this.enabled = true,
-    this.background = skBlack,
-    this.surface = skDarkSurface,
-    this.textPrimary = skYellow,
-    this.textSecondary = skDimYellow,
-    this.accent = skYellow,
-    this.onAccent = skBlack,
-    this.border = skYellow,
-    this.icon = skYellow,
-    this.appBarBackground = skBlack,
-    this.appBarForeground = skYellow,
-    // Action buttons: black fill, yellow text/icon, yellow border (the
-    // border comes from `border` + `borderWidth`).
-    this.fabBackground = skBlack,
-    this.fabForeground = skYellow,
+    Color? background,
+    Color? surface,
+    Color? textPrimary,
+    Color? textSecondary,
+    Color? accent,
+    Color? onAccent,
+    Color? border,
+    Color? icon,
+    Color? appBarBackground,
+    Color? appBarForeground,
+    Color? fabBackground,
+    Color? fabForeground,
     this.btnRev = skCurrentBtnRev,
     this.fontFamily = '',
     this.fontSizeScale = 1.0,
@@ -93,7 +99,70 @@ class SkUiKnobs {
     this.borderWidth = 1,
     this.iconSizeScale = 1.0,
     this.rowSpacing = 4,
-  });
+    Map<String, int>? roles,
+    List<String>? sectionOrder,
+    List<String>? sectionsOpen,
+  }) : background = background ?? Color(SkBase.background.defaultArgb),
+       surface = surface ?? Color(SkBase.surface.defaultArgb),
+       textPrimary = textPrimary ?? Color(SkBase.text.defaultArgb),
+       textSecondary = textSecondary ?? Color(SkBase.dim.defaultArgb),
+       accent = accent ?? Color(SkBase.accent.defaultArgb),
+       onAccent = onAccent ?? Color(SkBase.onAccent.defaultArgb),
+       border = border ?? Color(SkBase.border.defaultArgb),
+       icon = icon ?? Color(SkBase.icon.defaultArgb),
+       appBarBackground =
+           appBarBackground ?? Color(SkBase.barGround.defaultArgb),
+       appBarForeground = appBarForeground ?? Color(SkBase.barInk.defaultArgb),
+       fabBackground = fabBackground ?? Color(SkBase.fabGround.defaultArgb),
+       fabForeground = fabForeground ?? Color(SkBase.fabInk.defaultArgb),
+       roles = roles ?? {},
+       sectionOrder = sectionOrder ?? [],
+       sectionsOpen = sectionsOpen ?? [];
+
+  /// A foundation colour by name.
+  Color base(SkBase b) => switch (b) {
+    SkBase.background => background,
+    SkBase.surface => surface,
+    SkBase.accent => accent,
+    SkBase.onAccent => onAccent,
+    SkBase.text => textPrimary,
+    SkBase.dim => textSecondary,
+    SkBase.border => border,
+    SkBase.icon => icon,
+    SkBase.barGround => appBarBackground,
+    SkBase.barInk => appBarForeground,
+    SkBase.fabGround => fabBackground,
+    SkBase.fabInk => fabForeground,
+  };
+
+  void setBase(SkBase b, Color c) {
+    switch (b) {
+      case SkBase.background:
+        background = c;
+      case SkBase.surface:
+        surface = c;
+      case SkBase.accent:
+        accent = c;
+      case SkBase.onAccent:
+        onAccent = c;
+      case SkBase.text:
+        textPrimary = c;
+      case SkBase.dim:
+        textSecondary = c;
+      case SkBase.border:
+        border = c;
+      case SkBase.icon:
+        icon = c;
+      case SkBase.barGround:
+        appBarBackground = c;
+      case SkBase.barInk:
+        appBarForeground = c;
+      case SkBase.fabGround:
+        fabBackground = c;
+      case SkBase.fabInk:
+        fabForeground = c;
+    }
+  }
 
   factory SkUiKnobs.fromJson(Map<String, dynamic> m) {
     final d = SkUiKnobs();
@@ -101,6 +170,8 @@ class SkUiKnobs {
         m[k] is int ? Color(m[k] as int) : def;
     double n(String k, double def) =>
         m[k] is num ? (m[k] as num).toDouble() : def;
+    List<String>? strings(String k) =>
+        m[k] is List ? (m[k] as List).whereType<String>().toList() : null;
     return SkUiKnobs(
       enabled: m['enabled'] is bool ? m['enabled'] as bool : d.enabled,
       background: c('background', d.background),
@@ -123,6 +194,15 @@ class SkUiKnobs {
       borderWidth: n('borderWidth', d.borderWidth),
       iconSizeScale: n('iconSizeScale', d.iconSizeScale),
       rowSpacing: n('rowSpacing', d.rowSpacing),
+      roles: m['roles'] is Map
+          ? {
+              for (final e in (m['roles'] as Map).entries)
+                if (e.key is String && e.value is int)
+                  e.key as String: e.value as int,
+            }
+          : null,
+      sectionOrder: strings('sectionOrder'),
+      sectionsOpen: strings('sectionsOpen'),
     );
   }
 
@@ -148,6 +228,9 @@ class SkUiKnobs {
     'borderWidth': borderWidth,
     'iconSizeScale': iconSizeScale,
     'rowSpacing': rowSpacing,
+    'roles': roles,
+    'sectionOrder': sectionOrder,
+    'sectionsOpen': sectionsOpen,
   };
 }
 
@@ -203,16 +286,17 @@ class SkUiProvider extends ChangeNotifier {
         .map(Color.new)
         .toList();
     if (recentColors.isEmpty) {
-      // Prefill the one-click boxes with the house palette.
-      recentColors = const [
+      // Prefill the one-click boxes with the house palette. These are the
+      // picker's presets — data, not the colour of anything.
+      recentColors = [
         skYellow,
         skBlack,
-        skDimYellow,
-        Color(0xFFFFFFFF),
-        Color(0xFF808080),
-        Color(0xFFFF4040),
-        Color(0xFF40C040),
-        Color(0xFF4080FF),
+        Color(SkBase.dim.defaultArgb),
+        const Color(0xFFFFFFFF),
+        const Color(0xFF808080),
+        const Color(0xFFFF4040),
+        const Color(0xFF40C040),
+        const Color(0xFF4080FF),
       ];
     }
   }
@@ -228,6 +312,47 @@ class SkUiProvider extends ChangeNotifier {
   /// Back to the black-yellow defaults. Imported fonts stay available.
   void resetToDefaults() {
     knobs = SkUiKnobs();
+    save();
+  }
+
+  /// Gives one item a colour of its own; null puts it back to its default.
+  void setRole(SkRole role, Color? color, {bool persist = true}) {
+    if (color == null) {
+      knobs.roles.remove(role.name);
+    } else {
+      knobs.roles[role.name] = color.toARGB32();
+    }
+    persist ? save() : refresh();
+  }
+
+  void resetBase(SkBase b) {
+    knobs.setBase(b, Color(b.defaultArgb));
+    save();
+  }
+
+  /// Every colour back to its default: the foundation colours and every
+  /// item's own. Fonts, shapes and the page's arrangement are left alone.
+  void resetAllColours() {
+    for (final b in SkBase.values) {
+      knobs.setBase(b, Color(b.defaultArgb));
+    }
+    knobs.roles.clear();
+    save();
+  }
+
+  void setSectionOpen(SkSection s, bool open) {
+    knobs.sectionsOpen.remove(s.name);
+    if (open) knobs.sectionsOpen.add(s.name);
+    save();
+  }
+
+  void setSectionOrder(List<String> order) {
+    knobs.sectionOrder = [...order];
+    save();
+  }
+
+  void resetSectionOrder() {
+    knobs.sectionOrder = [];
     save();
   }
 

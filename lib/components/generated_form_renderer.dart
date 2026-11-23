@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/components/sk_pills.dart';
+import 'package:obtainium/providers/sk_ui_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/components/generated_form_model.dart';
@@ -919,7 +921,8 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
           autofocus: context.read<SettingsProvider>().isTV,
           // Only the primary-first (destructive) layout outlines its cancel
           // button — there the primary is red, so cancel carries the accent.
-          style: widget.primaryActionFirst
+          style:
+              widget.primaryActionFirst && SkPalette.maybeOf(context) == null
               ? TextButton.styleFrom(side: cancelSide)
               : null,
           onPressed: () {
@@ -935,7 +938,11 @@ class _GeneratedFormModalState extends State<GeneratedFormModal> {
             ? FilledButton(
                 style: widget.primaryActionColour == null
                     ? null
-                    : FilledButton.styleFrom(
+                    // Under the 白い熊 獲得 UI a coloured primary action is
+                    // the deleting one: the delete red on frame and label,
+                    // never a fill.
+                    : skDeletePill(context, main: true) ??
+                          FilledButton.styleFrom(
                         backgroundColor: widget.primaryActionColour,
                         foregroundColor:
                             widget.primaryActionTextColour ??

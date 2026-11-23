@@ -6,7 +6,8 @@ import 'package:equations/equations.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:shizuku_apk_installer/shizuku_apk_installer.dart';
 import 'package:obtainium/components/category_editor.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/components/sk_pills.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/custom_errors.dart';
@@ -498,7 +499,8 @@ class _SettingsPageState extends State<SettingsPage> {
       child: TvFocusRing(
         borderRadius: 12,
         child: ListTile(
-          leading: Icon(icon, color: cs.primary),
+          // Fork: coloured by what the row does.
+          leading: SkRoleIcon(icon, fallback: cs.primary),
           title: Text(title),
           trailing: Icon(
             trailingIcon,

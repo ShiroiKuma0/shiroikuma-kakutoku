@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/components/sk_pills.dart';
 import 'package:flutter/services.dart';
 import 'package:obtainium/theme.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
@@ -508,7 +509,8 @@ class ActionListTile extends StatelessWidget {
     return TvFocusRing(
       borderRadius: borderRadius?.topLeft.x ?? connectedTileBigRadius,
       child: ListTile(
-        leading: Icon(icon),
+        // Fork: coloured by what the row does.
+        leading: SkRoleIcon(icon),
         title: Text(label),
         trailing: trailing,
         enabled: onTap != null,

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show Locale, PlatformDispatcher;
 
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:obtainium/custom_errors.dart';

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/components/category_editor.dart';
@@ -842,25 +842,10 @@ class AddAppPageState extends State<AddAppPage> {
                               settingsProvider.selectionClick();
                               addApp(context);
                             },
-                      // Accent fill rather than the house black-on-accent
-                      // button, so the one action that commits the form is the
-                      // loudest thing on the page. Both states are stated
-                      // explicitly: styleFrom's colours cover the enabled state
-                      // only, so without the disabled pair the button falls
-                      // back to the theme (black fill, accent text) whenever
-                      // the URL is empty or the options are invalid.
+                      // The one action that commits the form: the main pill
+                      // of the page (3 dp, bold), never a filled slab.
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Theme.of(
-                          context,
-                        ).colorScheme.onPrimary,
-                        disabledBackgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.35),
-                        disabledForegroundColor: Theme.of(
-                          context,
-                        ).colorScheme.onPrimary.withValues(alpha: 0.75),
                       ),
                       // Text only — no leading icon; while the source is being
                       // fetched the label gives way to the spinner rather than

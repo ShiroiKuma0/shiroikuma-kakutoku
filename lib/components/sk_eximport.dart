@@ -1,6 +1,6 @@
 // shiroikuma-kakutoku fork: category Export/Import for the 白い熊 獲得 UI
 // page, in the sister-fork house style (Kōjiki flow, ArcaneChat buttons):
-// a settable export folder queried for the latest export, per-category
+// a settable export directory queried for the latest export, per-category
 // checkboxes with the sources first, a pill button row — Cancel separated
 // left, Import + Export right — and black-yellow bordered result dialogs.
 // On success the whole chain closes (info dialog → panel → UI page);
@@ -12,7 +12,8 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/sk_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
@@ -21,7 +22,6 @@ import 'package:obtainium/providers/source_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_storage/shared_storage.dart' as saf;
 
-const Color skWarnRed = Color(0xFFFF5252);
 
 const String skExportFormat = 'kakutoku-export';
 
@@ -126,7 +126,7 @@ class SkExportCancelled implements Exception {
   String toString() => 'cancelled';
 }
 
-/// The UI-page / panel status of the export folder + latest export in it.
+/// The UI-page / panel status of the export directory + latest export in it.
 class SkExportStatus {
   const SkExportStatus({
     required this.dirSet,
@@ -138,7 +138,7 @@ class SkExportStatus {
   final String message;
 }
 
-/// Serializes folder queries: two concurrent [saf.listFiles] listeners share
+/// Serializes directory queries: two concurrent [saf.listFiles] listeners share
 /// one platform event channel, and the second listener orphans the first
 /// (its stream never closes), so queries must never overlap.
 Future<void> _statusChain = Future.value();
@@ -162,7 +162,7 @@ String? skExportStamp(String name) {
   return '${m.group(1)} ${m.group(2)}:${m.group(3)}:${m.group(4)}';
 }
 
-/// Queries the export folder (if set) for the newest 白い熊 獲得 export.
+/// Queries the export directory (if set) for the newest 白い熊 獲得 export.
 /// Never throws and never hangs: every stage has its own timeout, every
 /// failure becomes a readable status, and [progress] reports the current
 /// stage so a stall is visible on screen instead of an eternal "…".
@@ -174,7 +174,7 @@ Future<SkExportStatus> skLastExportStatus(
   final run = () async {
     // Wait for any previous query (shared platform event channel), but
     // never inherit its hang.
-    progress?.call('waiting for a previous folder check…');
+    progress?.call('waiting for a previous directory check…');
     try {
       await prev.timeout(const Duration(seconds: 15));
     } catch (_) {}
@@ -184,11 +184,11 @@ Future<SkExportStatus> skLastExportStatus(
   return run;
 }
 
-/// Human-readable folder name from a SAF tree URI. `pathSegments` is
+/// Human-readable directory name from a SAF tree URI. `pathSegments` is
 /// already percent-decoded — never decode it again (a second
-/// [Uri.decodeComponent] THROWS on non-ASCII folder names, e.g. Japanese).
+/// [Uri.decodeComponent] THROWS on non-ASCII directory names, e.g. Japanese).
 String _dirDisplayName(Uri? dir) {
-  if (dir == null) return '(folder)';
+  if (dir == null) return '(directory)';
   var name = dir.pathSegments.isNotEmpty
       ? dir.pathSegments.last
       : dir.toString();
@@ -203,21 +203,21 @@ Future<SkExportStatus> _lastExportStatusInner(
   SettingsProvider sp,
   void Function(String stage)? progress,
 ) async {
-  progress?.call('checking the export folder…');
+  progress?.call('checking the export directory…');
   Uri? dir;
   var failure = '';
   try {
     dir = await sp.getExportDir().timeout(const Duration(seconds: 8));
   } on TimeoutException {
     dir = null;
-    failure = 'The folder permission check timed out.';
+    failure = 'The directory permission check timed out.';
   } catch (e) {
     dir = null;
-    failure = 'The folder check failed: $e';
+    failure = 'The directory check failed: $e';
   }
   if (dir == null) {
     if (failure.isNotEmpty) {
-      // The permission check failed, but a folder may still be stored —
+      // The permission check failed, but a directory may still be stored —
       // show its name rather than claiming nothing is set.
       final raw = sp.prefs?.getString('exportDir');
       if (raw != null) {
@@ -232,7 +232,7 @@ Future<SkExportStatus> _lastExportStatusInner(
       dirSet: false,
       message: failure.isNotEmpty
           ? '⚠ $failure'
-          : '⚠ No export folder set — your 白い熊 獲得 setup is NOT backed up',
+          : '⚠ No export directory set — your 白い熊 獲得 setup is NOT backed up',
     );
   }
   final dirName = _dirDisplayName(dir);
@@ -255,9 +255,9 @@ Future<SkExportStatus> _lastExportStatusInner(
       if (newestTs == null || ts.compareTo(newestTs) > 0) newestTs = ts;
     }
   } on TimeoutException {
-    listFailure = 'Listing the folder timed out.';
+    listFailure = 'Listing the directory timed out.';
   } catch (e) {
-    listFailure = 'Listing the folder failed: $e';
+    listFailure = 'Listing the directory failed: $e';
   }
   if (listFailure.isNotEmpty) {
     return SkExportStatus(dirSet: true, dirName: dirName, message: '⚠ $listFailure');
@@ -266,7 +266,7 @@ Future<SkExportStatus> _lastExportStatusInner(
     return SkExportStatus(
       dirSet: true,
       dirName: dirName,
-      message: 'No export in this folder yet.',
+      message: 'No export in this directory yet.',
     );
   }
   return SkExportStatus(
@@ -604,35 +604,34 @@ Future<void> skRestartApp() async {
   await channel.invokeMethod('restartApp');
 }
 
-/// ArcaneChat-style round pill outline button.
+/// An outlined pill button in the dialog roles: never filled; [main] — the
+/// one thing the block is for — has the 3 dp frame and a bold label.
 class SkPillButton extends StatelessWidget {
-  const SkPillButton(this.label, {super.key, this.onPressed});
+  const SkPillButton(
+    this.label, {
+    super.key,
+    this.onPressed,
+    this.main = false,
+    this.destructive = false,
+  });
   final String label;
   final VoidCallback? onPressed;
+  final bool main;
+  final bool destructive;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
-    final fg = onPressed == null ? accent.withValues(alpha: 0.4) : accent;
-    return Material(
-      color: theme.colorScheme.surface,
-      shape: StadiumBorder(side: BorderSide(color: fg, width: 1.5)),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        splashColor: accent.withValues(alpha: 0.2),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: Text(
-            label,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
+    final p = SkPalette.of(context);
+    return TextButton(
+      onPressed: onPressed,
+      style: skPillStyle(
+        frame: destructive ? p[SkRole.delete] : p[SkRole.dialogButtonFrame],
+        label: destructive ? p[SkRole.delete] : p[SkRole.dialogButtonLabel],
+        ground: p[SkRole.dialogGround],
+        base: Theme.of(context).textTheme.labelLarge,
+        main: main,
       ),
+      child: Text(label),
     );
   }
 }
@@ -724,7 +723,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
       await _pickDir();
       dir = await settingsProvider.getExportDir();
       if (dir == null) {
-        if (mounted) setState(() => _error = 'No export folder set.');
+        if (mounted) setState(() => _error = 'No export directory set.');
         return;
       }
     }
@@ -746,7 +745,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
         mimeType: 'application/zip',
         bytes: bytes,
       );
-      if (result == null) throw 'could not create the file in the folder';
+      if (result == null) throw 'could not create the file in the directory';
       if (!mounted) return;
       setState(() => _busy = false);
       await _showResultDialog(
@@ -830,16 +829,16 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
     required List<(String, String)> buttons,
   }) {
     final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
+    final p = SkPalette.of(context);
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => Dialog(
-        backgroundColor: theme.colorScheme.surface,
+        backgroundColor: p[SkRole.dialogGround],
         insetPadding: const EdgeInsets.all(16),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: accent, width: 2),
+          side: BorderSide(color: p[SkRole.dialogFrame], width: 2),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
@@ -851,13 +850,15 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
                 title,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: accent,
+                  color: p[SkRole.dialogTitle],
                 ),
               ),
               const SizedBox(height: 10),
               Text(
                 body,
-                style: theme.textTheme.bodyMedium?.copyWith(color: accent),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: p[SkRole.dialogBody],
+                ),
               ),
               const SizedBox(height: 16),
               Row(
@@ -867,6 +868,8 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
                     if (i > 0) const SizedBox(width: 10),
                     SkPillButton(
                       buttons[i].$1,
+                      // The last button is what the dialog is for.
+                      main: i == buttons.length - 1 && buttons.length > 1,
                       onPressed: () => Navigator.of(ctx).pop(buttons[i].$2),
                     ),
                   ],
@@ -911,16 +914,18 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
-    final dim = accent.withValues(alpha: 0.78);
+    final p = SkPalette.of(context);
+    final accent = p[SkRole.dialogBody];
+    final dim = p[SkRole.pageNote];
+    final warn = p[SkRole.warning];
     final st = _status;
-    final divider = Container(height: 1, color: accent.withValues(alpha: 0.4));
+    final divider = Container(height: 1, color: p[SkRole.menuDivider]);
     return Dialog(
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: p[SkRole.dialogGround],
       insetPadding: const EdgeInsets.all(16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: accent, width: 2),
+        side: BorderSide(color: p[SkRole.dialogFrame], width: 2),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -933,7 +938,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
                 'Export / Import — 白い熊 獲得',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: accent,
+                  color: p[SkRole.dialogTitle],
                 ),
               ),
             ),
@@ -952,22 +957,25 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: accent, width: 1.5),
+                  border: Border.all(
+                    color: p[SkRole.dialogButtonFrame],
+                    width: skPillRegularWidth,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Export folder (tap to choose)',
+                      'Export directory (tap to choose)',
                       style: theme.textTheme.bodySmall?.copyWith(color: dim),
                     ),
                     Text(
                       st == null
                           ? '…'
-                          : (st.dirName ?? 'Not set — tap to choose a folder'),
+                          : (st.dirName ?? 'Not set — tap to choose a directory'),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: (st?.dirSet ?? true) ? accent : skWarnRed,
+                        color: (st?.dirSet ?? true) ? accent : warn,
                       ),
                     ),
                   ],
@@ -979,7 +987,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
               Text(
                 st.message,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: st.dirSet ? accent : skWarnRed,
+                  color: st.dirSet ? accent : warn,
                 ),
               ),
             const SizedBox(height: 10),
@@ -1007,7 +1015,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   _error!,
-                  style: theme.textTheme.bodySmall?.copyWith(color: skWarnRed),
+                  style: theme.textTheme.bodySmall?.copyWith(color: warn),
                 ),
               ),
             if (_busy)
@@ -1027,7 +1035,11 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
                 const Spacer(),
                 SkPillButton('Import', onPressed: _busy ? null : _import),
                 const SizedBox(width: 8),
-                SkPillButton('Export', onPressed: _busy ? null : _export),
+                SkPillButton(
+                  'Export',
+                  main: true,
+                  onPressed: _busy ? null : _export,
+                ),
               ],
             ),
           ],

@@ -12,7 +12,8 @@ import 'dart:typed_data';
 
 import 'package:android_package_manager/android_package_manager.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/components/sk_pills.dart';
 import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 
@@ -229,15 +230,19 @@ class _SkInstalledAppPickerDialogState
                 onChanged: (v) => setState(() => _query = v),
               ),
             ),
-            SwitchListTile(
+            ListTile(
               dense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              leading: const SkRoleIcon(Icons.android, size: 20),
               title: Text(
                 tr('showSystemApps'),
                 style: const TextStyle(fontSize: 13),
               ),
-              value: _showSystemApps,
-              onChanged: (v) {
+              trailing: IgnorePointer(
+                child: Switch(value: _showSystemApps, onChanged: (_) {}),
+              ),
+              onTap: () {
+                final v = !_showSystemApps;
                 setState(() {
                   _showSystemApps = v;
                   if (v) _loading = true;
