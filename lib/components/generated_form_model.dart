@@ -25,6 +25,13 @@ class GeneratedFormTextField extends GeneratedFormItem {
   final String? helpUrl;
   final Widget? suffixIcon;
 
+  /// Fork: a widget shown at the end of the field in place of the help icon
+  /// (the linked-app picker button). [trailingKey] takes part in the form's
+  /// structure signature, so changing it re-initialises the field — which is
+  /// how a value chosen in the picker reaches the text controller.
+  final Widget? trailing;
+  final String? trailingKey;
+
   GeneratedFormTextField(
     super.key, {
     super.label,
@@ -36,6 +43,8 @@ class GeneratedFormTextField extends GeneratedFormItem {
     this.password = false,
     this.autoCompleteOptions,
     this.helpUrl,
+    this.trailing,
+    this.trailingKey,
     this.suffixIcon,
   });
 
@@ -57,6 +66,8 @@ class GeneratedFormTextField extends GeneratedFormItem {
       password: password,
       autoCompleteOptions: autoCompleteOptions,
       helpUrl: helpUrl,
+      trailing: trailing,
+      trailingKey: trailingKey,
       suffixIcon: suffixIcon,
     );
   }
@@ -100,11 +111,25 @@ class GeneratedFormSwitch extends GeneratedFormItem {
   bool disabled;
   final List<String> mutuallyExclusiveWith;
 
+  /// Fork: keys of other switches this one turns off when it is switched on.
+  /// Used for settings that cannot both apply (GitHub's release options vs.
+  /// following commits). Pair it with [disabledBy] on the other side, so that
+  /// the switches this one displaces cannot silently displace it back.
+  final List<String> excludes;
+
+  /// Fork: keys of switches that make this one inert while they are on. The
+  /// counterpart to [excludes]: the setting that wins greys out the ones it
+  /// makes irrelevant, instead of leaving them live to be flipped — which
+  /// would quietly undo it, with nothing on screen to say so.
+  final List<String> disabledBy;
+
   GeneratedFormSwitch(
     super.key, {
     super.label,
     bool super.value = false,
     this.disabled = false,
+    this.excludes = const [],
+    this.disabledBy = const [],
     this.mutuallyExclusiveWith = const [],
     List<String? Function(bool value)> super.additionalValidators = const [],
   });
@@ -123,6 +148,8 @@ class GeneratedFormSwitch extends GeneratedFormItem {
       label: label,
       value: value,
       disabled: disabled,
+      excludes: List.from(excludes),
+      disabledBy: List.from(disabledBy),
       mutuallyExclusiveWith: List.from(mutuallyExclusiveWith),
       additionalValidators: List.from(additionalValidators),
     );

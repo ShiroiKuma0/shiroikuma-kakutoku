@@ -35,6 +35,24 @@ kotlin {
     }
 }
 
+// shiroikuma-kakutoku fork: identity + versioning from ../fork.properties (repo root).
+// VERSION_NAME / VERSION_CODE track upstream Obtainium; BUILD_NUMBER is our +N increment.
+// forkVersionName = "<VERSION_NAME>+<BUILD_NUMBER, 3 digits>"; the counter is zero-padded so
+// version strings and APK filenames sort in build order (+010 after +009, not before +9) — the
+// global after-build rule. forkVersionCode = VERSION_CODE * 10000 + BUILD_NUMBER (plain int).
+val forkProperties = Properties()
+val forkPropertiesFile = rootProject.file("../fork.properties")
+if (forkPropertiesFile.exists()) {
+    forkPropertiesFile.reader(Charsets.UTF_8).use { forkProperties.load(it) }
+}
+val forkAppId = forkProperties.getProperty("APP_ID") ?: "shiroikuma.kakutoku"
+val forkBuildNumber = (forkProperties.getProperty("BUILD_NUMBER") ?: "1").toInt()
+val forkVersionName =
+    "${forkProperties.getProperty("VERSION_NAME") ?: flutterVersionName}+${"%03d".format(forkBuildNumber)}"
+val forkVersionCode =
+    (forkProperties.getProperty("VERSION_CODE") ?: flutterVersionCode).toInt() * 10000 +
+        forkBuildNumber
+
 android {
     namespace = "dev.imranr.obtainium"
     // Versioned form so the SDK's minor-version directory (android-37.0) is
@@ -54,13 +72,13 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.imranr.obtainium"
+        applicationId = forkAppId
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutterVersionCode.toInt()
-        versionName = flutterVersionName
+        versionCode = forkVersionCode
+        versionName = forkVersionName
     }
 
     flavorDimensions += "default"

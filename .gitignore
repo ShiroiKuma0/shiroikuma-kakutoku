@@ -57,3 +57,5 @@ node_modules/
 
 # FVM Version Cache
 .fvm/
+# shiroikuma fork
+.claude/settings.local.json

@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
 import 'package:hsluv/hsluv.dart';
 
 final _random = Random();

@@ -7,7 +7,8 @@ import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:shizuku_apk_installer/shizuku_apk_installer.dart'
     hide InstallerMode;
 import 'package:obtainium/components/category_editor.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/components/sk_pills.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/custom_errors.dart';
@@ -16,6 +17,7 @@ import 'package:obtainium/installers/root_installer.dart';
 import 'package:obtainium/installers/shizuku_installer.dart';
 import 'package:obtainium/main.dart';
 import 'package:obtainium/pages/import_export.dart';
+import 'package:obtainium/pages/sk_ui_page.dart';
 import 'package:obtainium/pages/pinned_certificates.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/external_install_bridge.dart';
@@ -105,10 +107,15 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  /// Opens the colour picker on [colour] (the theme colour when omitted),
+  /// reporting every change to [onChanged]. Returns false when the user
+  /// dismissed the dialog, so the caller can restore the previous colour.
   Future<bool> showColorPickerDialog(
     SettingsProvider settingsProvider,
-    ColorSwatch<Object> obtainiumSwatch,
-  ) async {
+    ColorSwatch<Object> obtainiumSwatch, {
+    Color? colour,
+    void Function(Color)? onChanged,
+  }) async {
     final titleText = tr(
       'selectX',
       args: [lowerCaseUnlessLang(tr('colour'), 'de')],
@@ -116,22 +123,30 @@ class _SettingsPageState extends State<SettingsPage> {
     if (settingsProvider.isTV) {
       final picked = await showTvColourPickerDialog(
         context,
-        initialColor: settingsProvider.themeColor,
+        initialColor: colour ?? settingsProvider.themeColor,
         title: titleText,
         extraColors: [obtainiumThemeColor],
         onColorChanged: (color) {
-          settingsProvider.themeColor = color;
+          if (onChanged != null) {
+            onChanged(color);
+          } else {
+            settingsProvider.themeColor = color;
+          }
           setState(() {});
         },
       );
       return picked != null;
     }
     final Map<ColorSwatch<Object>, String> colorsNameMap =
-        <ColorSwatch<Object>, String>{obtainiumSwatch: 'Obtainium'};
+        <ColorSwatch<Object>, String>{obtainiumSwatch: '白い熊 獲得'};
     return ColorPicker(
-      color: settingsProvider.themeColor,
+      color: colour ?? settingsProvider.themeColor,
       onColorChanged: (Color color) {
-        settingsProvider.themeColor = color;
+        if (onChanged != null) {
+          onChanged(color);
+        } else {
+          settingsProvider.themeColor = color;
+        }
         setState(() {});
       },
       actionButtons: const ColorPickerActionButtons(
@@ -193,6 +208,54 @@ class _SettingsPageState extends State<SettingsPage> {
     sp.themeColor = previousColor;
     setState(() {});
   }
+
+  /// Fork: a colour tile for any settings colour — swatch on the right, picker
+  /// on tap, previous colour restored if the dialog is dismissed.
+  Widget _colourTile(
+    SettingsProvider settingsProvider, {
+    required String label,
+    required Color colour,
+    required void Function(Color) onChanged,
+  }) => CardTile(
+    child: ListTile(
+      contentPadding: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(connectedTileBigRadius),
+      ),
+      title: Text(label),
+      subtitle: Text(
+        '${ColorTools.nameThatColor(colour)} '
+        '(${ColorTools.materialNameAndCode(colour)})',
+      ),
+      trailing: ColorIndicator(
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        color: colour,
+        onSelectFocus: false,
+        onSelect: () async {
+          final Color colourBeforeDialog = colour;
+          // Only restore (and so only write the setting) if the picker actually
+          // changed something — opening and dismissing it must leave the
+          // setting unset, so it keeps following the app's default.
+          bool changed = false;
+          final kept = await showColorPickerDialog(
+            settingsProvider,
+            colour.toSwatch(),
+            colour: colour,
+            onChanged: (picked) {
+              changed = true;
+              onChanged(picked);
+            },
+          );
+          if (!kept && changed) {
+            onChanged(colourBeforeDialog);
+            setState(() {});
+          }
+        },
+      ),
+    ),
+  );
 
   void handleInstallerModeChange(
     SettingsProvider settingsProvider,
@@ -412,6 +475,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     childBuilder: (ctx) => _buildAppearanceSection(ctx),
                   ),
                 ),
+                // Fork: the 白い熊 獲得 UI page — every colour, font and shape
+                // of the black-yellow look. Its own full page rather than a
+                // sub-page body, since it carries its own scaffold.
+                _settingsRow(
+                  context,
+                  icon: Icons.brush_outlined,
+                  title: '白い熊 獲得 UI',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SkUiPage()),
+                  ),
+                ),
               ]),
             ),
           ],
@@ -442,7 +516,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   trailingIconSize: 20,
                   onTap: () => _openExternalUrl(
                     context,
-                    'https://wiki.obtainium.imranr.dev/',
+                    'https://github.com/ShiroiKuma0/shiroikuma-kakutoku',
                   ),
                 ),
                 _settingsRow(
@@ -461,6 +535,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   },
                 ),
               ]),
+
             ),
           ],
         ),
@@ -531,7 +606,8 @@ class _SettingsPageState extends State<SettingsPage> {
         child: ListTile(
           autofocus: autofocus,
           contentPadding: AppPaddings.rowHorizontal,
-          leading: Icon(icon, color: cs.primary),
+          // Fork: coloured by what the row does.
+          leading: SkRoleIcon(icon, fallback: cs.primary),
           title: Text(title),
           subtitle: subtitle == null ? null : Text(subtitle),
           trailing: Icon(
@@ -1228,6 +1304,19 @@ class _SettingsPageState extends State<SettingsPage> {
             }
           },
         ),
+      ),
+      // Fork: the app-removal dialog's confirm button is user-colourable.
+      _colourTile(
+        settingsProvider,
+        label: tr('removeButtonColour'),
+        colour: settingsProvider.removeButtonColour,
+        onChanged: (colour) => settingsProvider.removeButtonColour = colour,
+      ),
+      _colourTile(
+        settingsProvider,
+        label: tr('removeButtonTextColour'),
+        colour: settingsProvider.removeButtonTextColour,
+        onChanged: (colour) => settingsProvider.removeButtonTextColour = colour,
       ),
       ToggleTile(
         label: tr('tactileFeedbackEnabled'),

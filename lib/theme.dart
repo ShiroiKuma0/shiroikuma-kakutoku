@@ -1,6 +1,6 @@
 // Builds the Material 3 Expressive theme for the app.
 
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
 
 /// Builds the app-wide Material 3 Expressive [ThemeData] for a given
 /// [colorScheme]. Expressive character lives here (large rounded shapes,

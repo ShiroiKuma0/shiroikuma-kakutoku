@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
 import 'package:obtainium/components/app_list_tile.dart';
 import 'package:obtainium/utils/string_utils.dart';
 import 'package:obtainium/components/category_editor.dart';
@@ -14,9 +14,11 @@ import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/utils/locale_utils.dart';
 import 'package:obtainium/main.dart';
 import 'package:obtainium/pages/app.dart';
+import 'package:obtainium/pages/sk_ui_page.dart';
 import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/utils/nav_helper.dart';
 import 'package:provider/provider.dart';
@@ -283,10 +285,11 @@ class AppsPageState extends State<AppsPage> {
     List<String> newInstallIdsAllOrSelected,
     List<String> trackOnlyUpdateIdsAllOrSelected,
   ) {
-    return appsProvider.areDownloadsRunning() ||
-            (existingUpdateIdsAllOrSelected.isEmpty &&
-                newInstallIdsAllOrSelected.isEmpty &&
-                trackOnlyUpdateIdsAllOrSelected.isEmpty)
+    // Fork: no longer gated on downloads running — apps already in the
+    // pipeline are skipped by the provider, the rest simply queue up.
+    return existingUpdateIdsAllOrSelected.isEmpty &&
+            newInstallIdsAllOrSelected.isEmpty &&
+            trackOnlyUpdateIdsAllOrSelected.isEmpty
         ? null
         : () {
             settingsProvider.heavyImpact();
@@ -741,7 +744,7 @@ class AppsPageState extends State<AppsPage> {
                       setSelectedAppsDisabled(selectedApps, !isDisabled);
                     },
                   ),
-                  if (hasObtainActions && !appsProvider.areDownloadsRunning())
+                  if (hasObtainActions)
                     optionTile(
                       icon: Icons.download_rounded,
                       label: tr('installUpdateSelectedApps'),
@@ -812,7 +815,7 @@ class AppsPageState extends State<AppsPage> {
     final urls = buf.toString().trimRight();
     unawaited(
       SharePlus.instance.share(
-        ShareParams(text: urls, subject: 'Obtainium - ${tr('appsString')}'),
+        ShareParams(text: urls, subject: '白い熊 獲得 - ${tr('appsString')}'),
       ),
     );
   }
@@ -828,7 +831,7 @@ class AppsPageState extends State<AppsPage> {
       SharePlus.instance.share(
         ShareParams(
           text: buf.toString(),
-          subject: 'Obtainium - ${tr('appsString')}',
+          subject: '白い熊 獲得 - ${tr('appsString')}',
         ),
       ),
     );
@@ -1063,7 +1066,7 @@ class AppsPageState extends State<AppsPage> {
     ];
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
         child: settingsProvider.isTV
             ? _TVSearchBar(
                 controller: searchController,
@@ -1125,7 +1128,7 @@ class AppsPageState extends State<AppsPage> {
         child: onObtain == null
             ? const SizedBox(width: double.infinity)
             : Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
                 child: ConnectedCard(
                   color: cs.primaryContainer,
                   child: Padding(
@@ -1349,12 +1352,32 @@ class AppsPageState extends State<AppsPage> {
                                   tooltip: tr('cancel'),
                                 ),
                         ),
-                      IconButton(
-                        onPressed: () {
-                          NavHelper.pushSettingsPage(context);
-                        },
-                        icon: const Icon(Icons.settings_outlined),
-                        tooltip: tr('settings'),
+                      // Tap = Settings; long-press = the 白い熊 獲得 UI
+                      // theming page. (No Tooltip here — a tooltip's own
+                      // long-press recognizer would swallow the long-press.)
+                      Semantics(
+                        label: tr('settings'),
+                        button: true,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () {
+                              NavHelper.pushSettingsPage(context);
+                            },
+                            onLongPress: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SkUiPage(),
+                                ),
+                              );
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.all(10),
+                              child: Icon(Icons.settings_outlined),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -1522,12 +1545,11 @@ class _BulkUpdateDialogState extends State<_BulkUpdateDialog> {
     final tt = Theme.of(context).textTheme;
     if (aim == null) return const SizedBox.shrink();
     final isNewInstall = aim.app.installedVersion == null;
-    final isUpdate =
-        aim.app.installedVersion != null &&
-        aim.app.installedVersion != aim.app.latestVersion;
+    final isUpdate = aim.app.installedVersion != null && skIsOutdated(aim.app);
     final versionLabel = isUpdate
-        ? '${aim.app.installedVersion} → ${aim.app.latestVersion}'
-        : aim.app.latestVersion;
+        ? '${skDisplayVersionOrNull(aim.app.installedVersion)} → '
+              '${skDisplayVersion(aim.app.latestVersion)}'
+        : skDisplayVersion(aim.app.latestVersion);
     return CheckboxListTile(
       dense: true,
       contentPadding: const EdgeInsets.only(left: 4, right: 4),

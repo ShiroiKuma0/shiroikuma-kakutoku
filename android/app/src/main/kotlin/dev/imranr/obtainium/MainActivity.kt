@@ -35,6 +35,8 @@ import java.security.cert.X509Certificate
 class MainActivity : FlutterActivity() {
     private companion object {
         const val EXTERNAL_INSTALL_CHANNEL = "dev.imranr.obtainium/external_install"
+        // shiroikuma-kakutoku fork channel (app restart for the import flow).
+        const val SK_CHANNEL = "dev.imranr.obtainium/sk"
         const val DOCUMENT_TREE_CHANNEL = "dev.imranr.obtainium/document_tree"
         const val CERTIFICATE_CHANNEL = "dev.imranr.obtainium/certificate"
         const val APK_MIME = "application/vnd.android.package-archive"
@@ -218,6 +220,23 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // shiroikuma-kakutoku fork: app restart for the 白い熊 獲得 UI
+        // import flow ("Restart now" after a category import).
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            SK_CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "restartApp" -> {
+                    packageManager.getLaunchIntentForPackage(packageName)?.let {
+                        startActivity(Intent.makeRestartActivityTask(it.component))
+                    }
+                    result.success(true)
+                    Runtime.getRuntime().exit(0)
+                }
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             CERTIFICATE_CHANNEL,
@@ -293,6 +312,7 @@ class MainActivity : FlutterActivity() {
                             onError = { result.error("DELETE_FAILED", it.message, null) },
                         )
                     }
+
                 }
                 else -> result.notImplemented()
             }

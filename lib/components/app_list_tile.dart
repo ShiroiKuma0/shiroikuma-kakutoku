@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/providers/sk_ui_provider.dart';
+import 'package:obtainium/sk_theme.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -15,6 +17,7 @@ import 'package:obtainium/providers/apps_provider.dart';
 import 'package:obtainium/utils/format_utils.dart';
 import 'package:obtainium/providers/notifications_provider.dart';
 import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:obtainium/utils/update_health.dart';
 import 'package:obtainium/utils/nav_helper.dart';
@@ -58,7 +61,7 @@ void showChangeLogDialog(
       return GeneratedFormModal(
         title: tr('changes'),
         items: const [],
-        message: app.latestVersion,
+        message: skDisplayVersion(app.latestVersion),
         additionalWidgets: [
           changesUrl != null
               ? LinkText(
@@ -143,6 +146,11 @@ VoidCallback? getChangeLogFn(BuildContext context, App app) {
 class AppIconWidget extends StatefulWidget {
   final String appId;
   final bool installed;
+
+  /// Fork: the package a tap should launch — the app's own when installed,
+  /// or the local build a linked app is compared against. Null = not
+  /// launchable.
+  final String? openPackageId;
   final AppsProvider appsProvider;
   final double size;
 
@@ -152,6 +160,7 @@ class AppIconWidget extends StatefulWidget {
     required this.installed,
     required this.appsProvider,
     this.size = 44,
+    this.openPackageId,
   });
 
   @override
@@ -189,13 +198,16 @@ class _AppIconWidgetState extends State<AppIconWidget> {
       );
     }
 
+    // Fork: what a tap launches is [openPackageId] — the app's own package,
+    // or the local build a linked entry is compared against.
+    final openTarget = widget.openPackageId;
     return AppIconAction(
-      semanticLabel: widget.installed
+      semanticLabel: openTarget != null
           ? tr('openApp', args: [labelName])
           : labelName,
-      enabled: widget.installed,
-      onTap: widget.installed
-          ? () => packageManager.openApp(widget.appId)
+      enabled: openTarget != null,
+      onTap: openTarget != null
+          ? () => packageManager.openApp(openTarget)
           : null,
       onLongPress: openDetails,
       child: FutureBuilder(
@@ -220,7 +232,8 @@ class AppListRowCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: AppPaddings.listOuter,
+      // Fork: minimal horizontal whitespace around the app cards.
+      padding: const EdgeInsets.fromLTRB(2, 4, 2, 4),
       child: Card(clipBehavior: Clip.antiAlias, child: child),
     );
   }
@@ -283,8 +296,19 @@ class AppListTile extends StatelessWidget {
 
   Widget _updateButton(BuildContext context) {
     final trackOnly = _app.settings.getBool('trackOnly');
+    final linkedPackage = skLinkedPackage(_app);
     final cs = Theme.of(context).colorScheme;
-    final onPressed = appsProvider.areDownloadsRunning()
+    // Fork: only this app's own in-flight download disables its button —
+    // other apps' downloads are free to run alongside it.
+    // Fork: a linked entry's update is not ours to install — the APK comes
+    // from our own build of that source, so the button says so instead.
+    final onPressed = linkedPackage != null
+        ? () => showSkRebuildToUpdateDialog(
+            context,
+            linkedPackage: linkedPackage,
+            latestVersion: skDisplayVersion(_app.latestVersion),
+          )
+        : appsProvider.isAppObtaining(_app.id)
         ? null
         : () {
             settingsProvider.heavyImpact();
@@ -308,20 +332,38 @@ class AppListTile extends StatelessWidget {
                   if (context.mounted) showError(e, context);
                 });
           };
+    // Per-app download/update button: an outlined ring, never filled, its
+    // glyph coloured by what it does (it installs: the call role).
+    final sk = SkPalette.maybeOf(context);
     return IconButton.filled(
       onPressed: onPressed,
-      tooltip: trackOnly ? tr('markUpdated') : tr('update'),
+      tooltip: linkedPackage != null
+          ? tr('rebuildToUpdate')
+          : trackOnly
+          ? tr('markUpdated')
+          : tr('update'),
       style: IconButton.styleFrom(
-        backgroundColor: cs.primary,
-        foregroundColor: cs.onPrimary,
-        disabledBackgroundColor: cs.onSurface.withValues(alpha: 0.12),
+        backgroundColor: sk?[SkRole.buttonGround] ?? cs.surface,
+        foregroundColor: sk?.icon(SkIconRole.call) ?? cs.primary,
+        side: BorderSide(
+          color: sk?[SkRole.buttonFrame] ?? cs.primary,
+          width: sk != null ? skPillRegularWidth : 1.5,
+        ),
         disabledForegroundColor: cs.onSurface.withValues(alpha: 0.38),
         visualDensity: VisualDensity.compact,
-        shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(AppRadii.medium),
-        ),
+        shape: sk != null
+            ? const CircleBorder()
+            : RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(AppRadii.medium),
+              ),
       ),
-      icon: Icon(trackOnly ? Icons.check_rounded : Icons.download_rounded),
+      // Fork: a linked entry wears the same download arrow as any other app
+      // with an update — it is the same news, whoever ends up building it.
+      icon: Icon(
+        trackOnly && linkedPackage == null
+            ? Icons.check_rounded
+            : Icons.download_rounded,
+      ),
     );
   }
 
@@ -400,7 +442,7 @@ class AppListTile extends StatelessWidget {
               child: _VersionLabel(
                 appInMemory: appInMemory,
                 settingsProvider: settingsProvider,
-                maxWidth: math.min(constraints.maxWidth / 3, 200),
+                maxWidth: math.min(constraints.maxWidth / 2, 260),
                 showChangesFn: showChangesFn,
               ),
             )
@@ -408,7 +450,7 @@ class AppListTile extends StatelessWidget {
             _VersionLabel(
               appInMemory: appInMemory,
               settingsProvider: settingsProvider,
-              maxWidth: math.min(constraints.maxWidth / 3, 200),
+              maxWidth: math.min(constraints.maxWidth / 2, 260),
               showChangesFn: showChangesFn,
             ),
         ],
@@ -482,7 +524,7 @@ class AppListTile extends StatelessWidget {
               CustomSemanticsAction(
                 label: canUpdate ? tr('update') : tr('install'),
               ): () {
-                if (!appsProvider.areDownloadsRunning()) {
+                if (!appsProvider.isAppObtaining(appId)) {
                   appsProvider.downloadAndInstallLatestApps([
                     appId,
                   ], appNavigatorKey.currentContext);
@@ -534,7 +576,10 @@ class AppListTile extends StatelessWidget {
                     : () {
                         final icon = AppIconWidget(
                           appId: _app.id,
-                          installed: appInMemory.installedInfo != null,
+                          // Fork: a linked entry opens the local build it is
+                          // compared against.
+                          installed: appInMemory.displayPackageId != null,
+                          openPackageId: appInMemory.displayPackageId,
                           appsProvider: appsProvider,
                           size: metrics.iconSize,
                         );
@@ -648,7 +693,7 @@ class AppListTile extends StatelessWidget {
                 confirmDismiss: (direction) async {
                   if (direction == DismissDirection.startToEnd) {
                     if ((canInstall || canUpdate) &&
-                        !appsProvider.areDownloadsRunning()) {
+                        !appsProvider.isAppObtaining(appId)) {
                       settingsProvider.heavyImpact();
                       unawaited(
                         appsProvider
@@ -689,9 +734,16 @@ class DownloadProgressTrailing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final installing = progress < 0;
-    final label = installing ? tr('installing') : '${progress.toInt()}%';
-    final sizeLabel = installing
+    // Fork: queued (waiting for a download slot or for the install lock) is
+    // its own state — neither downloading nor installing yet.
+    final queued = progress == queuedProgressSentinel;
+    final installing = !queued && progress < 0;
+    final label = queued
+        ? tr('queued')
+        : installing
+        ? tr('installing')
+        : '${progress.toInt()}%';
+    final sizeLabel = queued || installing
         ? null
         : formatDownloadSize(receivedBytes, totalBytes);
     final labelStyle =
@@ -711,7 +763,11 @@ class DownloadProgressTrailing extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadii.xs),
                   child: LinearProgressIndicator(
-                    value: installing ? null : progress / 100,
+                    value: installing
+                        ? null
+                        : queued
+                        ? 0
+                        : progress / 100,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -734,7 +790,7 @@ class DownloadProgressTrailing extends StatelessWidget {
             ),
           ),
         ),
-        if (!installing && onCancel != null)
+        if (!installing && !queued && onCancel != null)
           DownloadCancelButton(onPressed: onCancel!),
       ],
     );
@@ -774,7 +830,8 @@ class AppListGroupSection extends StatelessWidget {
     );
 
     return Padding(
-      padding: AppPaddings.listOuter,
+      // Minimal horizontal whitespace around the grouped app cards.
+      padding: const EdgeInsets.fromLTRB(2, 4, 2, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         // Small gaps so entries read as distinct positional tiles, matching the
@@ -902,8 +959,7 @@ class AppListBuilder {
         : const <String>[];
 
     return apps.where((app) {
-      if (app.app.installedVersion == app.app.latestVersion &&
-          !(filter.includeUptodate)) {
+      if (!skIsOutdated(app.app) && !(filter.includeUptodate)) {
         return false;
       }
       if (app.app.installedVersion != null &&
@@ -1015,6 +1071,17 @@ class AppListBuilder {
     bool buryNonInstalled,
     Set<String> existingUpdates,
   ) {
+    // Fork: our own builds lead, and they lead in every block below — the
+    // splits that follow all preserve the order they are handed, so seeding
+    // that order here puts ours at the top of the updates, of the installed
+    // and of the not-installed run alike, each still alphabetical within.
+    final ours = <AppInMemory>[];
+    final theirs = <AppInMemory>[];
+    for (final a in apps) {
+      (a.isOurs ? ours : theirs).add(a);
+    }
+    apps = [...ours, ...theirs];
+
     if (pinUpdates) {
       final temp = <AppInMemory>[];
       apps = apps.where((sa) {
@@ -1105,7 +1172,10 @@ class _VersionLabel extends StatelessWidget {
                     ? TextDirection.ltr
                     : Directionality.of(context),
                 child: Text(
-                  installedVersionText(app),
+                  // Fork: shown in full — folded over up to three lines rather
+                  // than cut off, which long git-versioned strings always were.
+                  skWrappableVersion(installedVersionText(app)),
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
                   style: TextStyle(
@@ -1168,21 +1238,34 @@ class _VersionLabel extends StatelessWidget {
   }
 
   bool isVersionUpdate(App app) {
-    final installed = app.installedVersion;
-    final latest = app.latestVersion;
-    return installed != null && installed != latest;
+    // Fork: our own outdated test (linked-package comparison, git-version
+    // normalization) rather than a plain string inequality.
+    final installed = skDisplayVersionOrNull(app.installedVersion);
+    return installed != null && skIsOutdated(app);
   }
 
   String installedVersionText(App app) {
     if (app.disabled) {
       return tr('disabled');
     }
-    final installed = app.installedVersion;
-    final latest = app.latestVersion;
+    final installed = skDisplayVersionOrNull(_installedVersionForDisplay(app));
+    final latest = skDisplayVersion(app.latestVersion);
     if (isVersionUpdate(app)) {
       return '$installed → $latest';
     }
     return installed ?? tr('notInstalled');
+  }
+
+  /// Fork: a linked entry stores its installed version with our build counter
+  /// stripped, since that is the form the source's version can be compared
+  /// against — but the list names the local build in full ("1.6.10+023"), so
+  /// which build is on the phone is readable without opening the app page.
+  String? _installedVersionForDisplay(App app) {
+    if (app.installedVersion == null || skLinkedPackage(app) == null) {
+      return app.installedVersion;
+    }
+    final raw = appInMemory.linkedInfo?.versionName?.trim();
+    return raw == null || raw.isEmpty ? app.installedVersion : raw;
   }
 
   String changesLabel(App app, bool hasChangeLogFn) {

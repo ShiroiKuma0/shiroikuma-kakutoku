@@ -3,7 +3,8 @@ import 'dart:typed_data';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/components/sk_pills.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/custom_errors.dart';
@@ -143,9 +144,12 @@ class _PinSetEditorPageState extends State<PinSetEditorPage> {
                         onPressed: _saving ? null : _delete,
                         icon: const Icon(Icons.delete_outline),
                         label: Text(tr('deletePinSet')),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: colorScheme.error,
-                        ),
+                        // Fork: what deletes is red on frame and label.
+                        style:
+                            skDeletePill(context) ??
+                            OutlinedButton.styleFrom(
+                              foregroundColor: colorScheme.error,
+                            ),
                       ),
                     ],
                   ],

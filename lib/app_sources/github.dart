@@ -101,6 +101,61 @@ class GitHub extends AppSource {
         'includePrereleases',
         label: tr('includePrereleases'),
         value: false,
+        disabledBy: const ['trackCommits'],
+      ),
+    ],
+    // Fork: same switch as AppSource.fallbackToOlderReleasesFormItem, but
+    // meaningless while commits are followed — there are no releases to fall
+    // back to. Following commits turns both release options off and greys
+    // them out; turning it off hands them back.
+    [
+      GeneratedFormSwitch(
+        'fallbackToOlderReleases',
+        label: tr('fallbackToOlderReleases'),
+        value: true,
+        disabledBy: const ['trackCommits'],
+      ),
+    ],
+    // Fork: follow the repo's commits instead of its releases — for upstreams
+    // we rebase onto and build ourselves (see sk_linked_version.dart).
+    [
+      GeneratedFormSwitch(
+        'trackCommits',
+        label: tr('trackCommits'),
+        value: false,
+        excludes: const ['includePrereleases', 'fallbackToOlderReleases'],
+      ),
+    ],
+    [
+      GeneratedFormTextField(
+        'trackCommitsBranch',
+        label: tr('trackCommitsBranch'),
+        required: false,
+        hint: tr('defaultBranch'),
+      ),
+    ],
+    // Fork: where the upstream version comes from while commits are followed.
+    // Without these the prefix is the repo's newest release tag, which is wrong
+    // for upstreams that tag something other than the version they ship.
+    [
+      GeneratedFormTextField(
+        'trackCommitsVersionFile',
+        label: tr('trackCommitsVersionFile'),
+        required: false,
+        hint: 'app/build.gradle.kts',
+      ),
+    ],
+    [
+      GeneratedFormTextField(
+        'trackCommitsVersionRegEx',
+        label: tr('trackCommitsVersionRegEx'),
+        required: false,
+        hint: _defaultVersionFileRegEx,
+        additionalValidators: [
+          (value) {
+            return regExValidator(value);
+          },
+        ],
       ),
     ],
     [
@@ -110,7 +165,6 @@ class GitHub extends AppSource {
         value: false,
       ),
     ],
-    AppSource.fallbackToOlderReleasesFormItem,
     [
       GeneratedFormTextField(
         'filterReleaseTitlesByRegEx',
@@ -356,6 +410,10 @@ class GitHub extends AppSource {
     return reqUrl;
   }
 
+  @override
+  bool enforceTrackOnlyFor(Map<String, dynamic> additionalSettings) =>
+      enforceTrackOnly || additionalSettings['trackCommits'] == true;
+
   Future<String> getAPIHost(Map<String, dynamic> additionalSettings) async {
     final host = hosts.isNotEmpty ? hosts[0] : 'github.com';
     if (host == 'github.com' || host == 'www.github.com') {
@@ -532,6 +590,34 @@ class GitHub extends AppSource {
       ? _getPublishDateFromRelease(rel)
       : _getNewestAssetDateFromRelease(rel);
 
+  /// Fork: orders two releases by date, with a name tie-break for the dateless.
+  ///
+  /// Every entry of the tag list the source falls back to when a repo lists no
+  /// releases is dateless — the tags endpoint reports none — and comparing two
+  /// of those as if one were newer is not an ordering at all: `compare(a, b)`
+  /// and `compare(b, a)` both said "later", so Dart's quicksort left the list
+  /// in an arbitrary permutation and "latest" came out a random tag
+  /// (premnirmal/StockTicker resolved to its 2020 CI tag `300900719`).
+  /// Dateless entries are therefore settled by name, which is the only thing
+  /// that distinguishes them, so such a list still resolves to its highest tag.
+  ///
+  /// A dateless entry still loses to a dated one: a release that does not say
+  /// when it was cut must never take "latest" from one that does.
+  int _compareReleasesByDate(
+    dynamic a,
+    dynamic b,
+    DateTime? dateA,
+    DateTime? dateB,
+  ) {
+    if (dateA != null && dateB != null) return dateA.compareTo(dateB);
+    if (dateA != null) return 1;
+    if (dateB != null) return -1;
+    return compareAlphaNumeric(
+      (a['tag_name'] ?? a['name'])?.toString() ?? '',
+      (b['tag_name'] ?? b['name'])?.toString() ?? '',
+    );
+  }
+
   void _sortGitHubReleases(
     List<dynamic> releases,
     String sortMethod,
@@ -567,7 +653,7 @@ class GitHub extends AppSource {
           b,
           () => _getReleaseDateFromRelease(b, useLatestAssetDateAsReleaseDate),
         );
-        return (dateA ?? DateTime(0)).compareTo(dateB ?? DateTime(0));
+        return _compareReleasesByDate(a, b, dateA, dateB);
       }
 
       final nameA = a['tag_name'] ?? a['name'];
@@ -583,7 +669,7 @@ class GitHub extends AppSource {
           b,
           useLatestAssetDateAsReleaseDate,
         );
-        return (dateA ?? DateTime(0)).compareTo(dateB ?? DateTime(0));
+        return _compareReleasesByDate(a, b, dateA, dateB);
       }
 
       if (sortMethod != 'name' && stdFormats.isNotEmpty) {
@@ -770,6 +856,42 @@ class GitHub extends AppSource {
     return null;
   }
 
+  /// Fork: the repo's `releases/latest`, consulted when the release listing
+  /// came back empty. Null on anything but a usable release.
+  ///
+  /// GitHub sometimes serves an empty list for a repo that plainly has
+  /// releases: for premnirmal/StockTicker (2026-08) `/releases` answers `[]`
+  /// on every page — authenticated or not — while its own `Link` header
+  /// advertises 33 pages, and `/releases/latest` returns `4.1.004` with its
+  /// assets attached. Believed, the empty list drops a track-only entry into
+  /// the tag fallback, and a repo whose CI tags builds by counter then reports
+  /// a "version" like `300900767` that no build of ours can ever match.
+  ///
+  /// One extra request, only on the path that was about to fail anyway, and
+  /// only for the releases endpoint — the tag fallback re-enters this method
+  /// with a `/tags` URL, which has no `latest` of its own. Any failure leaves
+  /// that fallback to run exactly as before, which stays the right answer for
+  /// a repo that really has published nothing.
+  Future<dynamic> _fetchLatestReleaseFallback(
+    String requestUrl,
+    Map<String, dynamic> additionalSettings,
+  ) async {
+    final uri = Uri.parse(requestUrl);
+    if (!uri.path.endsWith('/releases')) return null;
+    try {
+      final Response res = await _sourceRequestWithAuthFallback(
+        uri.replace(query: null, path: '${uri.path}/latest').toString(),
+        additionalSettings,
+      );
+      if (res.statusCode != 200) return null;
+      final decoded = jsonDecode(res.body);
+      if (decoded is! Map || decoded['draft'] == true) return null;
+      return (decoded['tag_name'] ?? decoded['name']) != null ? decoded : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Fetches and parses GitHub releases, applying sort/filter/prelease settings,
   /// then resolves the best matching release to an [APKDetails] result.
   Future<APKDetails> _fetchReleaseDetails(
@@ -860,6 +982,15 @@ class GitHub extends AppSource {
       throw getObtainiumHttpError(res);
     }
     var releases = decoded;
+    // Fork: an empty listing is not proof of an empty repo — ask the one
+    // endpoint that still answers before believing it (see
+    // [_fetchLatestReleaseFallback]).
+    if (releases.isEmpty && latestRelease == null) {
+      latestRelease = await _fetchLatestReleaseFallback(
+        requestUrl,
+        additionalSettings,
+      );
+    }
     if (latestRelease != null) {
       final latestTag = latestRelease['tag_name'] ?? latestRelease['name'];
       if (releases
@@ -958,11 +1089,196 @@ class GitHub extends AppSource {
     }
   }
 
+  /// Fork: the version literal nearly every Gradle project carries, used when
+  /// a version file is named without a regex of its own.
+  static const String _defaultVersionFileRegEx = r'versionName\s*=\s*"([^"]+)"';
+
+  /// Fork: a tag name as a version number — "v0.2.79" -> "0.2.79", the form
+  /// our forks carry in their own version names. Null for an empty tag.
+  String? _versionFromTag(String? tag) {
+    var t = tag?.trim() ?? '';
+    if (t.length > 1 &&
+        (t[0] == 'v' || t[0] == 'V') &&
+        t.codeUnitAt(1) >= 48 &&
+        t.codeUnitAt(1) <= 57) {
+      t = t.substring(1);
+    }
+    return t.isEmpty ? null : t;
+  }
+
+  /// Fork: the upstream version read out of a file in the repo, at the exact
+  /// commit being followed — for upstreams that never tag a release the version
+  /// they ship (Jami keeps `versionName = "20260731-01"` in its
+  /// `build.gradle.kts` and tags only `android/release_502`).
+  ///
+  /// Reading at the commit's own sha rather than at the branch tip is the whole
+  /// point: the version string then describes one commit consistently, instead
+  /// of pairing a sha with a version literal that moved after it.
+  ///
+  /// Best-effort like [_fetchUpstreamVersionPrefix] — a missing file, a
+  /// non-matching regex or an over-1MB file (which the contents API declines to
+  /// inline) all return null and leave the prefix to the release-tag lookup,
+  /// rather than failing an update check that already succeeded.
+  Future<String?> _fetchVersionFromRepoFile(
+    String apiUrl,
+    String sha,
+    Map<String, dynamic> additionalSettings,
+  ) async {
+    final path = (additionalSettings['trackCommitsVersionFile'] as String?)
+        ?.trim();
+    if (path == null || path.isEmpty) return null;
+    try {
+      final Response res = await _sourceRequestWithAuthFallback(
+        '$apiUrl/contents/${path.split('/').map(Uri.encodeComponent).join('/')}'
+        '?ref=$sha',
+        additionalSettings,
+      );
+      if (res.statusCode != 200) return null;
+      final decoded = jsonDecode(res.body);
+      if (decoded is! Map || decoded['encoding'] != 'base64') return null;
+      final String? content = decoded['content'] as String?;
+      if (content == null || content.isEmpty) return null;
+      // The API wraps its base64 at 60 columns; the decoder rejects the breaks.
+      final String text = utf8.decode(
+        base64.decode(content.replaceAll(RegExp(r'\s'), '')),
+        allowMalformed: true,
+      );
+      final pattern =
+          (additionalSettings['trackCommitsVersionRegEx'] as String?)?.trim();
+      final match = RegExp(
+        pattern == null || pattern.isEmpty ? _defaultVersionFileRegEx : pattern,
+      ).firstMatch(text);
+      if (match == null) return null;
+      final String? version = match.groupCount >= 1
+          ? match.group(1)
+          : match.group(0);
+      return _versionFromTag(version);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Fork: the upstream version a followed commit sits on, so the reported
+  /// version reads like the fork version it is compared against
+  /// ("0.2.79.2026-08-02.gbc343f35", not a bare "2026-08-02.gbc343f35").
+  ///
+  /// Taken from the repo's latest release tag, falling back to its newest tag
+  /// for repos that tag without releasing (and for ones whose releases are all
+  /// prereleases, which `releases/latest` reports as 404). Entirely
+  /// best-effort: the prefix is a label, never the thing that decides whether
+  /// a fork is current, so any failure here — rate limit included — simply
+  /// leaves it off rather than failing an update check that already succeeded.
+  Future<String?> _fetchUpstreamVersionPrefix(
+    String apiUrl,
+    Map<String, dynamic> additionalSettings,
+  ) async {
+    try {
+      final Response res = await _sourceRequestWithAuthFallback(
+        '$apiUrl/releases/latest',
+        additionalSettings,
+      );
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        return _versionFromTag(decoded?['tag_name'] as String?);
+      }
+      if (res.statusCode != 404) return null;
+      final Response tagRes = await _sourceRequestWithAuthFallback(
+        '$apiUrl/tags?per_page=1',
+        additionalSettings,
+      );
+      if (tagRes.statusCode != 200) return null;
+      final decoded = jsonDecode(tagRes.body);
+      if (decoded is! List || decoded.isEmpty) return null;
+      return _versionFromTag(decoded.first?['name'] as String?);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Fork: the newest commit on the tracked branch, as a pseudo-release whose
+  /// version mirrors the `<upstream version>.<commit date>.g<8-char sha>` name
+  /// our git-versioned forks embed in their own version — so "up to date"
+  /// means "rebased onto this commit".
+  ///
+  /// The date is the commit's committer date **in UTC**, and is there to sort:
+  /// a sha alone orders builds arbitrarily. UTC is not a detail — GitHub
+  /// normalises committer dates to Z and drops the original offset, so it is
+  /// the only rendering both sides can compute. The git-versioning skill was
+  /// changed to match on 2026-08-06; a fork still pinning the commit's own
+  /// timezone (git's `--date=format:`) will disagree by a day for any commit
+  /// made late in a negative-offset evening, and a linked entry then shows an
+  /// update no rebase can satisfy.
+  Future<APKDetails> _fetchLatestCommitDetails(
+    String standardUrl,
+    Map<String, dynamic> additionalSettings,
+  ) async {
+    final branch = (additionalSettings['trackCommitsBranch'] as String?)
+        ?.trim();
+    final apiUrl = await convertStandardUrlToAPIUrl(
+      standardUrl,
+      additionalSettings,
+    );
+    final url =
+        '$apiUrl/commits?per_page=1'
+        '${branch != null && branch.isNotEmpty ? '&sha=${Uri.encodeQueryComponent(branch)}' : ''}';
+    final Response res = await _sourceRequestWithAuthFallback(
+      url,
+      additionalSettings,
+    );
+    if (res.statusCode != 200) {
+      rateLimitErrorCheck(res);
+      throw getObtainiumHttpError(res);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List || decoded.isEmpty) {
+      throw NoReleasesError();
+    }
+    final commit = decoded.first;
+    final String? sha = commit['sha'] as String?;
+    if (sha == null || sha.length < 8) {
+      throw NoReleasesError();
+    }
+    final commitData = commit['commit'];
+    final String? dateString =
+        commitData?['committer']?['date'] ?? commitData?['author']?['date'];
+    final String? message = commitData?['message'] as String?;
+    final DateTime? commitDate = dateString != null
+        ? DateTime.tryParse(dateString)
+        : null;
+    final String datePrefix = commitDate != null
+        ? '${commitDate.toUtc().toIso8601String().substring(0, 10)}.'
+        : '';
+    // A named version file wins: it is the version the followed commit itself
+    // declares, where the release tag is only the newest one the repo happens
+    // to carry. Falls back when unset, unreadable or unmatched.
+    final String? upstreamVersion =
+        await _fetchVersionFromRepoFile(apiUrl, sha, additionalSettings) ??
+        await _fetchUpstreamVersionPrefix(apiUrl, additionalSettings);
+    final String versionPrefix = upstreamVersion != null
+        ? '$upstreamVersion.'
+        : '';
+    return APKDetails(
+      '$versionPrefix$datePrefix'
+      'g${sha.substring(0, 8)}',
+      [],
+      getAppNames(standardUrl),
+      releaseDate: commitDate,
+      changeLog: message,
+    );
+  }
+
   @override
   Future<APKDetails> getLatestAPKDetails(
     String standardUrl,
     Map<String, dynamic> additionalSettings,
   ) async {
+    if (additionalSettings['trackCommits'] == true) {
+      try {
+        return await _fetchLatestCommitDetails(standardUrl, additionalSettings);
+      } catch (e) {
+        rethrowOrWrapError(e);
+      }
+    }
     try {
       return await fetchReleaseDetailsWithTagFallback(
         standardUrl,

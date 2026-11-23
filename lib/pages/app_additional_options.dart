@@ -1,10 +1,13 @@
 import 'package:easy_localization/easy_localization.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:obtainium/components/generated_form_renderer.dart';
+import 'package:obtainium/components/sk_installed_app_picker.dart';
 import 'package:obtainium/components/ui_widgets.dart';
 import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/providers/apps_provider.dart';
+import 'package:obtainium/providers/settings_provider.dart';
+import 'package:obtainium/providers/sk_linked_version.dart';
 import 'package:obtainium/providers/source_provider.dart';
+import 'package:obtainium/sk_material.dart';
 import 'package:obtainium/utils/nav_helper.dart';
 import 'package:provider/provider.dart';
 
@@ -43,25 +46,71 @@ Future<Map<String, dynamic>?> showAdditionalOptionsPage(
   AppInMemory? app, {
   String? scrollToSection,
 }) {
-  final items =
-      <List<GeneratedFormItem>>[
-        ...(source?.combinedAppSpecificSettingFormItems ?? []),
-      ].map((row) {
-        row = row.map((e) {
-          if (app?.app.additionalSettings[e.key] != null) {
-            e.value = app?.app.additionalSettings[e.key];
-          }
-          return e;
-        }).toList();
-        return row;
-      }).toList();
-
   Map<String, dynamic> values = {};
+
+  // Fork: the "compare against installed app" row gets an app-picker button
+  // (and a typeahead over installed packages, which is what makes the row
+  // usable on TV and with a hardware keyboard). Picking rebuilds the form
+  // with a fresh trailingKey — GeneratedForm re-initialises when the item
+  // hash changes, which is how the new value reaches the field.
+  final List<String> packageOptions =
+      skInstalledPackages
+          .where((p) => p.packageName != null && skIsUserApp(p))
+          .map((p) => p.packageName!)
+          .toList()
+        ..sort();
+
+  List<List<GeneratedFormItem>> buildItems(
+    int pickerRevision,
+    VoidCallback onPicked,
+  ) {
+    return (source?.combinedAppSpecificSettingFormItems ?? []).map((row) {
+      return row.map((e) {
+        // Seed from the live form state so an edit made before opening the
+        // picker survives the rebuild, falling back to the saved settings.
+        final current = values.containsKey(e.key)
+            ? values[e.key]
+            : app?.app.additionalSettings[e.key];
+        if (current != null) {
+          e.value = current;
+        }
+        // Fork: the Title field opens holding the title the entry currently
+        // shows, so renaming one is an edit rather than a retype. Leaving it
+        // as found stores nothing (see applyAdditionalOptionChanges), which
+        // is what keeps an unrenamed entry following its source and its
+        // linked build.
+        if (e.key == 'appName' &&
+            app != null &&
+            (e.value as String?)?.trim().isEmpty != false) {
+          e.value = app.autoName;
+        }
+        if (e.key != skLinkedPackageKey || e is! GeneratedFormTextField) {
+          return e;
+        }
+        return GeneratedFormTextField(
+          e.key,
+          label: e.label,
+          value: (e.value ?? '') as String,
+          required: false,
+          hint: e.hint,
+          autoCompleteOptions: packageOptions,
+          trailingKey: 'linkedPicker$pickerRevision',
+          trailing: IconButton(
+            icon: const Icon(Icons.apps),
+            tooltip: tr('pickInstalledApp'),
+            onPressed: onPicked,
+          ),
+        );
+      }).toList();
+    }).toList();
+  }
+
   return Navigator.of(context).push<Map<String, dynamic>>(
     MaterialPageRoute(
       traversalEdgeBehavior: traversalEdgeBehaviorFor(context),
       builder: (ctx) => PopScope<Map<String, dynamic>>(
-        // Leaving the page saves the settings, so there is no Continue button.
+        // Leaving the page saves the settings; the Save button on the page
+        // only says so and gives an explicit way out.
         canPop: false,
         onPopInvokedWithResult: (didPop, result) {
           if (didPop) return;
@@ -75,9 +124,23 @@ Future<Map<String, dynamic>?> showAdditionalOptionsPage(
         },
         child: _AdditionalOptionsPage(
           title: tr('additionalOptions'),
-          items: items,
+          buildItems: buildItems,
           scrollToSection: scrollToSection,
           onValuesChanged: (v) => values = v,
+          onSave: () => Navigator.of(ctx).pop(values),
+          pickLinked: (pageContext) async {
+            final picked = await showSkInstalledAppPicker(
+              pageContext,
+              selected:
+                  (values[skLinkedPackageKey] ??
+                          app?.app.additionalSettings[skLinkedPackageKey])
+                      as String?,
+              matchApp: app?.app,
+            );
+            if (picked == null) return false;
+            values[skLinkedPackageKey] = picked;
+            return true;
+          },
         ),
       ),
     ),
@@ -93,6 +156,19 @@ Future<void> applyAdditionalOptionChanges(
 }) async {
   final appsProvider = context.read<AppsProvider>();
   final Map<String, dynamic> originalSettings = app.app.additionalSettings;
+  // Fork: the options form knows nothing about a waved-through version, so
+  // handing its values back wholesale would drop the mark and the entry
+  // would report the same push as an update again.
+  final String? setUpdatedVersion = skSetUpdatedVersion(app.app);
+  // Fork: the Title field was prefilled with the automatic title, so handing
+  // it back unchanged must not freeze that text as an override — it would
+  // then stop following a renamed linked build or a renamed upstream. Only a
+  // title the user actually altered is stored.
+  final String prefilledTitle = app.autoName;
+  final String? typedTitle = (values['appName'] as String?)?.trim();
+  if (typedTitle != null && typedTitle == prefilledTitle) {
+    values = Map<String, dynamic>.from(values)..['appName'] = '';
+  }
   final savedValues = Map<String, dynamic>.from(values);
   // The additional-options form does not include every stored setting
   // (e.g. the add-time package ID field and source-config overrides such as
@@ -101,13 +177,30 @@ Future<void> applyAdditionalOptionChanges(
     savedValues.putIfAbsent(key, () => value);
   });
   app.app = app.app.copyWith(additionalSettings: savedValues);
-  if (source?.enforceTrackOnly == true) {
+  if (setUpdatedVersion != null) {
+    app.app = app.app.copyWith(
+      additionalSettings: skSettingsWithSetUpdated(app.app, setUpdatedVersion),
+    );
+  }
+  if (source?.enforceTrackOnlyFor(app.app.additionalSettings) == true) {
     app.app = app.app.copyWith(
       additionalSettings: Map<String, dynamic>.from(app.app.additionalSettings)
         ..['trackOnly'] = true,
     );
     if (context.mounted) {
       showMessage(tr('appsFromSourceAreTrackOnly'), context);
+    }
+  }
+  // Fork: an app compared against a local build must never install the
+  // upstream APK over it, so linking implies track-only.
+  if (skLinkedPackage(app.app) != null &&
+      !app.app.settings.getBool('trackOnly')) {
+    app.app = app.app.copyWith(
+      additionalSettings: Map<String, dynamic>.from(app.app.additionalSettings)
+        ..['trackOnly'] = true,
+    );
+    if (context.mounted) {
+      showMessage(tr('linkedAppsAreTrackOnly'), context);
     }
   }
   final versionDetectionEnabled =
@@ -194,14 +287,29 @@ Future<void> refreshAppMetadata(
 class _AdditionalOptionsPage extends StatefulWidget {
   const _AdditionalOptionsPage({
     required this.title,
-    required this.items,
+    required this.buildItems,
     required this.onValuesChanged,
+    required this.onSave,
+    required this.pickLinked,
     this.scrollToSection,
   });
 
   final String title;
-  final List<List<GeneratedFormItem>> items;
+
+  /// Fork: the form's items, rebuilt whenever the linked-app picker hands a
+  /// package back (see [showAdditionalOptionsPage]).
+  final List<List<GeneratedFormItem>> Function(
+    int pickerRevision,
+    VoidCallback onPicked,
+  )
+  buildItems;
   final ValueChanged<Map<String, dynamic>> onValuesChanged;
+
+  /// Fork: leaves the page with the current values.
+  final VoidCallback onSave;
+
+  /// Fork: opens the installed-app picker; true when a package was picked.
+  final Future<bool> Function(BuildContext context) pickLinked;
   final String? scrollToSection;
 
   @override
@@ -209,6 +317,14 @@ class _AdditionalOptionsPage extends StatefulWidget {
 }
 
 class _AdditionalOptionsPageState extends State<_AdditionalOptionsPage> {
+  int _pickerRevision = 0;
+
+  Future<void> _pickLinked() async {
+    if (await widget.pickLinked(context) && mounted) {
+      setState(() => _pickerRevision++);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -241,6 +357,28 @@ class _AdditionalOptionsPageState extends State<_AdditionalOptionsPage> {
       body: CustomScrollView(
         slivers: [
           CustomAppBar(title: widget.title),
+          // Fork: leaving the page already saves, but nothing said so — this
+          // states the outcome and gives an explicit way out. It is the main
+          // action of the page.
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    context.read<SettingsProvider>().selectionClick();
+                    widget.onSave();
+                  },
+                  icon: const Icon(Icons.check_rounded),
+                  label: Text(tr('saveChanges')),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+            ),
+          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
@@ -252,7 +390,7 @@ class _AdditionalOptionsPageState extends State<_AdditionalOptionsPage> {
               child: TvInitialFocus(
                 child: GeneratedForm(
                   tileMode: true,
-                  items: widget.items,
+                  items: widget.buildItems(_pickerRevision, _pickLinked),
                   onValueChanges: (v, valid, isBuilding) {
                     widget.onValuesChanged(v);
                   },
