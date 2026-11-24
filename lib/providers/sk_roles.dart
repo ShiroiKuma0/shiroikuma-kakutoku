@@ -14,6 +14,7 @@
 
 import 'package:material_ui/material_ui.dart';
 import 'package:obtainium/providers/sk_ui_provider.dart';
+import 'package:obtainium/sk_strings.dart';
 
 /// The two primaries. Written once, here.
 const int _yellow = 0xFFFFFF00;
@@ -25,23 +26,25 @@ const Color skBlack = Color(_black);
 /// knob fields the first versions of the page shipped, so stored settings
 /// keep their meaning.
 enum SkBase {
-  background('Background', SkKind.ground, _black),
-  surface('Surface (cards, sheets)', SkKind.ground, 0xFF0A0A00),
-  accent('Accent', SkKind.mark, _yellow),
-  onAccent('On accent (ink on an accent ground)', SkKind.ink, _black),
-  text('Text', SkKind.ink, _yellow),
-  dim('Secondary text', SkKind.ink, 0xFFB8B800),
-  border('Border', SkKind.frame, _yellow),
-  icon('Icon', SkKind.icon, _yellow),
-  barGround('Top bar ground', SkKind.ground, _black),
-  barInk('Top bar text and icons', SkKind.ink, _yellow),
-  fabGround('Action button ground', SkKind.ground, _black),
-  fabInk('Action button text and icon', SkKind.ink, _yellow);
+  background(SkKind.ground, _black),
+  surface(SkKind.ground, 0xFF0A0A00),
+  accent(SkKind.mark, _yellow),
+  onAccent(SkKind.ink, _black),
+  text(SkKind.ink, _yellow),
+  dim(SkKind.ink, 0xFFB8B800),
+  border(SkKind.frame, _yellow),
+  icon(SkKind.icon, _yellow),
+  barGround(SkKind.ground, _black),
+  barInk(SkKind.ink, _yellow),
+  fabGround(SkKind.ground, _black),
+  fabInk(SkKind.ink, _yellow);
 
-  const SkBase(this.label, this.kind, this.defaultArgb);
-  final String label;
+  const SkBase(this.kind, this.defaultArgb);
   final SkKind kind;
   final int defaultArgb;
+
+  /// The name shown on the UI page (tool/sk_strings).
+  String get label => skTr('skBase_$name');
 }
 
 /// What kind of thing a role colours; picks the row's icon on the UI page.
@@ -71,35 +74,66 @@ enum SkIconRole {
   delete,
 }
 
-/// The top-level sections of the UI page. A role is set in the section of the
-/// item it colours; a few sections hold other controls as well, or only those.
-enum SkSection {
-  eximport('Export / Import', SkIconRole.share),
-  general('General', SkIconRole.view),
-  foundation('Foundation', SkIconRole.view),
-  text('Text & font', SkIconRole.message),
-  buttons('Buttons', SkIconRole.call),
-  dialogs('Dialogs', SkIconRole.message),
-  switches('Switches', SkIconRole.call),
-  marks('Check boxes & radio buttons', SkIconRole.message),
-  menus('Menus', SkIconRole.view),
-  lists('Lists', SkIconRole.view),
-  fields('Text fields & pickers', SkIconRole.message),
-  bars('Bars & tabs', SkIconRole.view),
-  panels('Cards & sheets', SkIconRole.view),
-  chips('Chips & selectors', SkIconRole.contact),
-  progress('Progress & sliders', SkIconRole.call),
-  messages('Messages & tooltips', SkIconRole.message),
-  icons('Icons', SkIconRole.contact),
-  shape('Shape & density', SkIconRole.view),
-  page('This page', SkIconRole.view),
-  picker('Colour picker', SkIconRole.contact),
-  screens('Shared screen colours', SkIconRole.view),
-  maintenance('Maintenance', SkIconRole.block);
+/// What kind of thing a section is; its icon — on the heading and on the
+/// index chip alike — takes the colour of the kind. Seven colours, each with
+/// one meaning; they are roles of their own, not the row icon roles.
+enum SkSectionKind {
+  /// What the app is, and its settings. The accent.
+  base,
 
-  const SkSection(this.title, this.role);
-  final String title;
-  final SkIconRole role;
+  /// What you operate.
+  controls,
+
+  /// Words, written and read.
+  words,
+
+  /// The frame and its boxes.
+  frame,
+
+  /// The app reaches out: asks, offers, hands over.
+  reach,
+
+  /// Resets and wipes.
+  warning,
+
+  /// A brief flash. One section at most.
+  flash,
+}
+
+/// The top-level sections of the UI page, in their default order — arranged
+/// so that no two neighbours share a colour. A role is set in the section of
+/// the item it colours; a few sections hold other controls as well, or only
+/// those. The titles are in tool/sk_strings.
+enum SkSection {
+  // Always first: every 白い熊 app opens its UI page with the app's language.
+  language(SkSectionKind.words),
+  eximport(SkSectionKind.reach),
+  general(SkSectionKind.base),
+  text(SkSectionKind.words),
+  foundation(SkSectionKind.base),
+  buttons(SkSectionKind.controls),
+  dialogs(SkSectionKind.reach),
+  switches(SkSectionKind.controls),
+  menus(SkSectionKind.reach),
+  marks(SkSectionKind.controls),
+  lists(SkSectionKind.frame),
+  fields(SkSectionKind.words),
+  bars(SkSectionKind.frame),
+  icons(SkSectionKind.base),
+  chips(SkSectionKind.controls),
+  shape(SkSectionKind.base),
+  panels(SkSectionKind.frame),
+  page(SkSectionKind.base),
+  progress(SkSectionKind.controls),
+  screens(SkSectionKind.base),
+  messages(SkSectionKind.flash),
+  picker(SkSectionKind.reach),
+  maintenance(SkSectionKind.warning);
+
+  const SkSection(this.kind);
+  final SkSectionKind kind;
+
+  String get title => skTr('skSection_$name');
 
   static SkSection? byName(String name) {
     for (final s in values) {
@@ -161,266 +195,223 @@ const _mark = SkKind.mark;
 /// Every item's own colour role.
 enum SkRole {
   // ---- Text ----
-  textDisplay(SkSection.text, 'Large headings', _ink, _text),
-  textTitle(SkSection.text, 'Titles', _ink, _text),
-  textBody(SkSection.text, 'Body text', _ink, _text),
-  textLabel(SkSection.text, 'Labels', _ink, _text),
-  textSmall(SkSection.text, 'Small print and captions', _ink, _dim),
-  textLink(SkSection.text, 'Links', _ink, _accent),
-  cursor(SkSection.text, 'Text cursor', _mark, _accent),
+  textDisplay(SkSection.text, _ink, _text),
+  textTitle(SkSection.text, _ink, _text),
+  textBody(SkSection.text, _ink, _text),
+  textLabel(SkSection.text, _ink, _text),
+  textSmall(SkSection.text, _ink, _dim),
+  textLink(SkSection.text, _ink, _accent),
+  cursor(SkSection.text, _mark, _accent),
   selection(
     SkSection.text,
-    'Text selection',
     _ground,
     SkDef(SkBase.background, SkBase.accent, 0.4),
   ),
-  selectionHandle(SkSection.text, 'Selection handles', _mark, _accent),
+  selectionHandle(SkSection.text, _mark, _accent),
 
   // ---- Buttons ----
-  buttonMainFrame(SkSection.buttons, 'Main button frame', _frame, _border),
-  buttonMainLabel(SkSection.buttons, 'Main button label', _ink, _fabInk),
-  buttonFrame(SkSection.buttons, 'Button frame', _frame, _border),
-  buttonLabel(SkSection.buttons, 'Button label', _ink, _text),
-  buttonGround(SkSection.buttons, 'Button ground', _ground, _fabGround),
-  fabFrame(SkSection.buttons, 'Floating button frame', _frame, _border),
-  fabGround(SkSection.buttons, 'Floating button ground', _ground, _fabGround),
-  fabIcon(SkSection.buttons, 'Floating button icon and label', _glyph, _fabInk),
-  glyphButton(SkSection.buttons, 'Glyph buttons', _glyph, _icon),
-  delete(
-    SkSection.buttons,
-    'Delete red (frame, label and icon of what deletes)',
-    _mark,
-    SkDef.lit(0xFFFF0000),
-  ),
+  buttonMainFrame(SkSection.buttons, _frame, _border),
+  buttonMainLabel(SkSection.buttons, _ink, _fabInk),
+  buttonFrame(SkSection.buttons, _frame, _border),
+  buttonLabel(SkSection.buttons, _ink, _text),
+  buttonGround(SkSection.buttons, _ground, _fabGround),
+  fabFrame(SkSection.buttons, _frame, _border),
+  fabGround(SkSection.buttons, _ground, _fabGround),
+  fabIcon(SkSection.buttons, _glyph, _fabInk),
+  glyphButton(SkSection.buttons, _glyph, _icon),
+  delete(SkSection.buttons, _mark, SkDef.lit(0xFFFF0000)),
 
   // ---- Dialogs ----
-  dialogGround(SkSection.dialogs, 'Dialog ground', _ground, _bg),
-  dialogFrame(SkSection.dialogs, 'Dialog frame', _frame, _border),
-  dialogTitle(SkSection.dialogs, 'Dialog title', _ink, _text),
-  dialogBody(SkSection.dialogs, 'Dialog text', _ink, _text),
-  dialogButtonFrame(SkSection.dialogs, 'Dialog button frame', _frame, _border),
-  dialogButtonLabel(SkSection.dialogs, 'Dialog button label', _ink, _text),
-  dialogScrim(
-    SkSection.dialogs,
-    'Shade behind a dialog',
-    _ground,
-    SkDef.lit(0x8A000000),
-  ),
+  dialogGround(SkSection.dialogs, _ground, _bg),
+  dialogFrame(SkSection.dialogs, _frame, _border),
+  dialogTitle(SkSection.dialogs, _ink, _text),
+  dialogBody(SkSection.dialogs, _ink, _text),
+  dialogButtonFrame(SkSection.dialogs, _frame, _border),
+  dialogButtonLabel(SkSection.dialogs, _ink, _text),
+  dialogScrim(SkSection.dialogs, _ground, SkDef.lit(0x8A000000)),
 
   // ---- Switches ----
-  switchOnOutline(SkSection.switches, 'On: outline', _frame, _accent),
-  switchOnDot(SkSection.switches, 'On: dot', _mark, _accent),
-  switchOffOutline(SkSection.switches, 'Off: outline', _frame, _switchOff),
-  switchOffDot(SkSection.switches, 'Off: dot', _mark, _switchOff),
+  switchOnOutline(SkSection.switches, _frame, _accent),
+  switchOnDot(SkSection.switches, _mark, _accent),
+  switchOffOutline(SkSection.switches, _frame, _switchOff),
+  switchOffDot(SkSection.switches, _mark, _switchOff),
 
   // ---- Check boxes and radio buttons ----
-  checkOn(SkSection.marks, 'Ticked box', _mark, _accent),
-  checkTick(SkSection.marks, 'Tick', _mark, _onAccent),
-  checkOff(SkSection.marks, 'Empty box frame', _frame, _border),
-  radioOn(SkSection.marks, 'Chosen radio button', _mark, _accent),
-  radioOff(SkSection.marks, 'Radio button not chosen', _frame, _border),
+  checkOn(SkSection.marks, _mark, _accent),
+  checkTick(SkSection.marks, _mark, _onAccent),
+  checkOff(SkSection.marks, _frame, _border),
+  radioOn(SkSection.marks, _mark, _accent),
+  radioOff(SkSection.marks, _frame, _border),
 
   // ---- Menus ----
-  menuGround(SkSection.menus, 'Menu ground', _ground, _bg),
-  menuFrame(SkSection.menus, 'Menu frame', _frame, _border),
-  menuLabel(SkSection.menus, 'Menu label', _ink, _text),
-  menuRowFrame(SkSection.menus, 'Menu row frame', _frame, _border),
-  menuDivider(SkSection.menus, 'Menu group divider', _line, _darkAccent),
-  menuCheck(SkSection.menus, 'Mark of the chosen entry', _mark, _accent),
+  menuGround(SkSection.menus, _ground, _bg),
+  menuFrame(SkSection.menus, _frame, _border),
+  menuLabel(SkSection.menus, _ink, _text),
+  menuRowFrame(SkSection.menus, _frame, _border),
+  menuDivider(SkSection.menus, _line, _darkAccent),
+  menuCheck(SkSection.menus, _mark, _accent),
 
   // ---- Lists ----
-  listTitle(SkSection.lists, 'Row title', _ink, _text),
-  listSubtitle(SkSection.lists, 'Row second line', _ink, _dim),
-  listIcon(SkSection.lists, 'Row icon', _glyph, _icon),
+  listTitle(SkSection.lists, _ink, _text),
+  listSubtitle(SkSection.lists, _ink, _dim),
+  listIcon(SkSection.lists, _glyph, _icon),
   listSelected(
     SkSection.lists,
-    'Selected row ground',
     _ground,
     SkDef(SkBase.background, SkBase.accent, 0.2),
   ),
-  divider(SkSection.lists, 'Divider', _line, _border),
+  divider(SkSection.lists, _line, _border),
 
   // ---- Text fields and pickers ----
-  fieldText(SkSection.fields, 'Entered text', _ink, _text),
-  fieldLabel(SkSection.fields, 'Field label', _ink, _text),
-  fieldHint(SkSection.fields, 'Hint', _ink, _dim),
-  fieldFrame(SkSection.fields, 'Field frame', _frame, _border),
-  fieldFocusFrame(SkSection.fields, 'Field frame in focus', _frame, _accent),
-  fieldGround(SkSection.fields, 'Field ground', _ground, _bg),
+  fieldText(SkSection.fields, _ink, _text),
+  fieldLabel(SkSection.fields, _ink, _text),
+  fieldHint(SkSection.fields, _ink, _dim),
+  fieldFrame(SkSection.fields, _frame, _border),
+  fieldFocusFrame(SkSection.fields, _frame, _accent),
+  fieldGround(SkSection.fields, _ground, _bg),
 
   // ---- Bars and tabs ----
-  appBarGround(SkSection.bars, 'Top bar ground', _ground, _barGround),
-  appBarTitle(SkSection.bars, 'Top bar title', _ink, _barInk),
-  appBarIcon(SkSection.bars, 'Top bar icons', _glyph, _barInk),
-  navGround(SkSection.bars, 'Navigation bar ground', _ground, _bg),
-  navIndicator(SkSection.bars, 'Mark of the current page', _mark, _accent),
-  navIconSelected(SkSection.bars, 'Icon of the current page', _glyph, _onAccent),
-  navIcon(SkSection.bars, 'Icons of the other pages', _glyph, _icon),
-  navLabel(SkSection.bars, 'Navigation labels', _ink, _text),
-  searchGround(SkSection.bars, 'Search bar ground', _ground, _surface),
-  searchFrame(SkSection.bars, 'Search bar frame', _frame, _border),
-  searchText(SkSection.bars, 'Search text', _ink, _text),
-  searchHint(SkSection.bars, 'Search hint', _ink, _dim),
-  tabSelected(SkSection.bars, 'Current tab', _ink, _accent),
-  tabUnselected(SkSection.bars, 'Other tabs', _ink, _dim),
+  appBarGround(SkSection.bars, _ground, _barGround),
+  appBarTitle(SkSection.bars, _ink, _barInk),
+  appBarIcon(SkSection.bars, _glyph, _barInk),
+  navGround(SkSection.bars, _ground, _bg),
+  navIndicator(SkSection.bars, _mark, _accent),
+  navIconSelected(SkSection.bars, _glyph, _onAccent),
+  navIcon(SkSection.bars, _glyph, _icon),
+  navLabel(SkSection.bars, _ink, _text),
+  searchGround(SkSection.bars, _ground, _surface),
+  searchFrame(SkSection.bars, _frame, _border),
+  searchText(SkSection.bars, _ink, _text),
+  searchHint(SkSection.bars, _ink, _dim),
+  tabSelected(SkSection.bars, _ink, _accent),
+  tabUnselected(SkSection.bars, _ink, _dim),
 
   // ---- Cards and sheets ----
-  cardGround(SkSection.panels, 'Card ground', _ground, _surface),
-  cardFrame(SkSection.panels, 'Card frame', _frame, _border),
-  sheetGround(SkSection.panels, 'Sheet ground', _ground, _bg),
-  sheetFrame(SkSection.panels, 'Sheet frame', _frame, _border),
-  sheetHandle(SkSection.panels, 'Sheet handle', _mark, _dim),
+  cardGround(SkSection.panels, _ground, _surface),
+  cardFrame(SkSection.panels, _frame, _border),
+  sheetGround(SkSection.panels, _ground, _bg),
+  sheetFrame(SkSection.panels, _frame, _border),
+  sheetHandle(SkSection.panels, _mark, _dim),
 
   // ---- Chips and selectors ----
-  chipGround(SkSection.chips, 'Chip ground', _ground, _surface),
-  chipFrame(SkSection.chips, 'Chip frame', _frame, _border),
-  chipLabel(SkSection.chips, 'Chip label', _ink, _text),
-  chipSelected(SkSection.chips, 'Chosen chip ground', _ground, _accent),
-  chipCheck(SkSection.chips, 'Chosen chip tick', _mark, _onAccent),
-  segGround(SkSection.chips, 'Selector ground', _ground, _bg),
-  segFrame(SkSection.chips, 'Selector frame', _frame, _border),
-  segLabel(SkSection.chips, 'Selector label', _ink, _text),
-  segSelectedGround(SkSection.chips, 'Chosen segment ground', _ground, _accent),
-  segSelectedLabel(SkSection.chips, 'Chosen segment label', _ink, _onAccent),
+  chipGround(SkSection.chips, _ground, _surface),
+  chipFrame(SkSection.chips, _frame, _border),
+  chipLabel(SkSection.chips, _ink, _text),
+  chipSelected(SkSection.chips, _ground, _accent),
+  chipCheck(SkSection.chips, _mark, _onAccent),
+  segGround(SkSection.chips, _ground, _bg),
+  segFrame(SkSection.chips, _frame, _border),
+  segLabel(SkSection.chips, _ink, _text),
+  segSelectedGround(SkSection.chips, _ground, _accent),
+  segSelectedLabel(SkSection.chips, _ink, _onAccent),
 
   // ---- Progress and sliders ----
-  progress(SkSection.progress, 'Progress', _mark, _accent),
-  progressTrack(SkSection.progress, 'Progress track', _line, _surface),
-  sliderActive(SkSection.progress, 'Slider, filled part', _line, _accent),
-  sliderTrack(SkSection.progress, 'Slider track', _line, _surface),
-  sliderThumb(SkSection.progress, 'Slider thumb', _mark, _accent),
-  sliderValueGround(SkSection.progress, 'Slider value bubble', _ground, _accent),
-  sliderValueText(SkSection.progress, 'Slider value text', _ink, _onAccent),
+  progress(SkSection.progress, _mark, _accent),
+  progressTrack(SkSection.progress, _line, _surface),
+  sliderActive(SkSection.progress, _line, _accent),
+  sliderTrack(SkSection.progress, _line, _surface),
+  sliderThumb(SkSection.progress, _mark, _accent),
+  sliderValueGround(SkSection.progress, _ground, _accent),
+  sliderValueText(SkSection.progress, _ink, _onAccent),
 
   // ---- Messages and tooltips ----
-  snackGround(SkSection.messages, 'Message ground', _ground, _surface),
-  snackFrame(SkSection.messages, 'Message frame', _frame, _border),
-  snackText(SkSection.messages, 'Message text', _ink, _text),
-  snackAction(SkSection.messages, 'Message action', _ink, _accent),
-  tooltipGround(SkSection.messages, 'Tooltip ground', _ground, _surface),
-  tooltipFrame(SkSection.messages, 'Tooltip frame', _frame, _border),
-  tooltipText(SkSection.messages, 'Tooltip text', _ink, _text),
-  warning(
-    SkSection.messages,
-    'Warnings and errors',
-    _mark,
-    SkDef.lit(0xFFFF5252),
-  ),
+  snackGround(SkSection.messages, _ground, _surface),
+  snackFrame(SkSection.messages, _frame, _border),
+  snackText(SkSection.messages, _ink, _text),
+  snackAction(SkSection.messages, _ink, _accent),
+  tooltipGround(SkSection.messages, _ground, _surface),
+  tooltipFrame(SkSection.messages, _frame, _border),
+  tooltipText(SkSection.messages, _ink, _text),
+  warning(SkSection.messages, _mark, SkDef.lit(0xFFFF5252)),
 
   // ---- Icons: coloured by what the row does ----
-  iconCall(
-    SkSection.icons,
-    'Installs, updates, connects',
-    _glyph,
-    SkDef.lit(0xFF00FF00),
-  ),
-  iconMessage(
-    SkSection.icons,
-    'Writes, edits, adds',
-    _glyph,
-    SkDef.lit(0xFF4D94FF),
-  ),
-  iconContact(
-    SkSection.icons,
-    'About an app, a person or an account',
-    _glyph,
-    SkDef.lit(0xFF00FFFF),
-  ),
-  iconShare(
-    SkSection.icons,
-    'Copies, shares, exports, imports',
-    _glyph,
-    SkDef.lit(0xFFFF8000),
-  ),
-  iconView(SkSection.icons, 'Views, opens, settings', _glyph, _accent),
-  iconBlock(
-    SkSection.icons,
-    'Blocks, hides, stops, skips',
-    _glyph,
-    SkDef.lit(0xFFFF00FF),
-  ),
+  iconCall(SkSection.icons, _glyph, SkDef.lit(0xFF00A550)),
+  iconMessage(SkSection.icons, _glyph, SkDef.lit(0xFF0066FF)),
+  iconContact(SkSection.icons, _glyph, SkDef.lit(0xFF00B0FF)),
+  iconShare(SkSection.icons, _glyph, SkDef.lit(0xFFFF8000)),
+  iconView(SkSection.icons, _glyph, _accent),
+  iconBlock(SkSection.icons, _glyph, SkDef.lit(0xFFFF3D7F)),
 
   // ---- The UI page itself ----
-  pageHeading(SkSection.page, 'Section heading', _ink, _accent),
-  pageSubheading(SkSection.page, 'Sub-heading', _ink, _accent),
-  pageLabel(SkSection.page, 'Row label', _ink, _text),
-  pageValue(SkSection.page, 'Row value', _ink, _dim),
-  pageNote(SkSection.page, 'Explanation (dim gold)', _ink, _gold),
-  pageRule(SkSection.page, 'Left rule of an explained row', _line, _gold),
-  pageDivider(SkSection.page, 'Line between sections', _line, _darkAccent),
-  pageChipFrame(SkSection.page, 'Index chip frame', _frame, _border),
-  pageChipLabel(SkSection.page, 'Index chip label', _ink, _text),
-  pagePillFrame(SkSection.page, 'Action pill frame', _frame, _border),
-  pagePillLabel(SkSection.page, 'Action pill label', _ink, _text),
-  swatchRing(SkSection.page, 'Ring round a colour swatch', _frame, _border),
+  pageHeading(SkSection.page, _ink, _accent),
+  pageSubheading(SkSection.page, _ink, _accent),
+  pageLabel(SkSection.page, _ink, _text),
+  pageValue(SkSection.page, _ink, _dim),
+  pageNote(SkSection.page, _ink, _gold),
+  pageRule(SkSection.page, _line, _gold),
+  pageDivider(SkSection.page, _line, _darkAccent),
+  pageChipFrame(SkSection.page, _frame, _border),
+  pageChipLabel(SkSection.page, _ink, _text),
+  pagePillFrame(SkSection.page, _frame, _border),
+  pagePillLabel(SkSection.page, _ink, _text),
+  swatchRing(SkSection.page, _frame, _border),
+
+  // ---- Section icons: one colour per kind of section ----
+  sectionBase(SkSection.page, _glyph, _accent),
+  sectionControls(SkSection.page, _glyph, SkDef.lit(0xFF00A550)),
+  sectionWords(SkSection.page, _glyph, SkDef.lit(0xFF00B0FF)),
+  sectionFrame(SkSection.page, _glyph, SkDef.lit(0xFF0066FF)),
+  sectionReach(SkSection.page, _glyph, SkDef.lit(0xFFFF8000)),
+  sectionWarning(SkSection.page, _glyph, SkDef.lit(0xFFFF0000)),
+  sectionFlash(SkSection.page, _glyph, SkDef.lit(0xFFFF3D7F)),
 
   // ---- The colour picker ----
-  pickerRed(SkSection.picker, 'Red channel', _line, SkDef.lit(0xFFFF5050)),
-  pickerGreen(SkSection.picker, 'Green channel', _line, SkDef.lit(0xFF50C050)),
-  pickerBlue(SkSection.picker, 'Blue channel', _line, SkDef.lit(0xFF5080FF)),
-  pickerAlpha(SkSection.picker, 'Opacity channel', _line, _accent),
-  checkerLight(
-    SkSection.picker,
-    'See-through pattern, light square',
-    _ground,
-    SkDef.lit(0xFFBBBBBB),
-  ),
-  checkerDark(
-    SkSection.picker,
-    'See-through pattern, dark square',
-    _ground,
-    SkDef.lit(0xFF666666),
-  ),
+  pickerRed(SkSection.picker, _line, SkDef.lit(0xFFFF5050)),
+  pickerGreen(SkSection.picker, _line, SkDef.lit(0xFF50C050)),
+  pickerBlue(SkSection.picker, _line, SkDef.lit(0xFF5080FF)),
+  pickerAlpha(SkSection.picker, _line, _accent),
+  checkerLight(SkSection.picker, _ground, SkDef.lit(0xFFBBBBBB)),
+  checkerDark(SkSection.picker, _ground, SkDef.lit(0xFF666666)),
 
   // ---- Colour-scheme entries upstream's screens read directly ----
-  schemePrimary(SkSection.screens, 'Primary', _mark, _accent),
-  schemeOnPrimary(SkSection.screens, 'On primary', _ink, _onAccent),
-  schemePrimaryContainer(SkSection.screens, 'Primary container', _ground, _surface),
-  schemeOnPrimaryContainer(SkSection.screens, 'On primary container', _ink, _text),
-  schemeSecondary(SkSection.screens, 'Secondary', _mark, _accent),
-  schemeOnSecondary(SkSection.screens, 'On secondary', _ink, _onAccent),
-  schemeSecondaryContainer(SkSection.screens, 'Secondary container', _ground, _surface),
-  schemeOnSecondaryContainer(SkSection.screens, 'On secondary container', _ink, _text),
-  schemeTertiary(SkSection.screens, 'Tertiary', _mark, _accent),
-  schemeOnTertiary(SkSection.screens, 'On tertiary', _ink, _onAccent),
-  schemeTertiaryContainer(SkSection.screens, 'Tertiary container', _ground, _surface),
-  schemeOnTertiaryContainer(SkSection.screens, 'On tertiary container', _ink, _text),
-  schemeError(SkSection.screens, 'Error', _mark, SkDef.lit(0xFFFF5252)),
-  schemeOnError(SkSection.screens, 'On error', _ink, _bg),
-  schemeErrorContainer(SkSection.screens, 'Error container', _ground, _surface),
-  schemeOnErrorContainer(
-    SkSection.screens,
-    'On error container',
-    _ink,
-    SkDef.lit(0xFFFF5252),
-  ),
-  schemeSurface(SkSection.screens, 'Screen ground', _ground, _bg),
-  schemeOnSurface(SkSection.screens, 'Ink on the screen ground', _ink, _text),
-  schemeOnSurfaceVariant(SkSection.screens, 'Quieter ink', _ink, _dim),
-  schemeSurfaceLowest(SkSection.screens, 'Lowest container', _ground, _bg),
-  schemeSurfaceLow(SkSection.screens, 'Low container', _ground, _surface),
-  schemeSurfaceContainer(SkSection.screens, 'Container', _ground, _surface),
-  schemeSurfaceHigh(SkSection.screens, 'High container', _ground, _surface),
-  schemeSurfaceHighest(SkSection.screens, 'Highest container', _ground, _surface),
-  schemeOutline(SkSection.screens, 'Outline', _frame, _border),
+  schemePrimary(SkSection.screens, _mark, _accent),
+  schemeOnPrimary(SkSection.screens, _ink, _onAccent),
+  schemePrimaryContainer(SkSection.screens, _ground, _surface),
+  schemeOnPrimaryContainer(SkSection.screens, _ink, _text),
+  schemeSecondary(SkSection.screens, _mark, _accent),
+  schemeOnSecondary(SkSection.screens, _ink, _onAccent),
+  schemeSecondaryContainer(SkSection.screens, _ground, _surface),
+  schemeOnSecondaryContainer(SkSection.screens, _ink, _text),
+  schemeTertiary(SkSection.screens, _mark, _accent),
+  schemeOnTertiary(SkSection.screens, _ink, _onAccent),
+  schemeTertiaryContainer(SkSection.screens, _ground, _surface),
+  schemeOnTertiaryContainer(SkSection.screens, _ink, _text),
+  schemeError(SkSection.screens, _mark, SkDef.lit(0xFFFF5252)),
+  schemeOnError(SkSection.screens, _ink, _bg),
+  schemeErrorContainer(SkSection.screens, _ground, _surface),
+  schemeOnErrorContainer(SkSection.screens, _ink, SkDef.lit(0xFFFF5252)),
+  schemeSurface(SkSection.screens, _ground, _bg),
+  schemeOnSurface(SkSection.screens, _ink, _text),
+  schemeOnSurfaceVariant(SkSection.screens, _ink, _dim),
+  schemeSurfaceLowest(SkSection.screens, _ground, _bg),
+  schemeSurfaceLow(SkSection.screens, _ground, _surface),
+  schemeSurfaceContainer(SkSection.screens, _ground, _surface),
+  schemeSurfaceHigh(SkSection.screens, _ground, _surface),
+  schemeSurfaceHighest(SkSection.screens, _ground, _surface),
+  schemeOutline(SkSection.screens, _frame, _border),
   schemeOutlineVariant(
     SkSection.screens,
-    'Quieter outline',
     _frame,
     SkDef(SkBase.background, SkBase.border, 0.5),
   ),
-  schemeInverseSurface(SkSection.screens, 'Inverse ground', _ground, _text),
-  schemeOnInverseSurface(SkSection.screens, 'Ink on the inverse ground', _ink, _bg),
-  schemeInversePrimary(SkSection.screens, 'Inverse primary', _mark, _bg),
-  schemeSurfaceTint(SkSection.screens, 'Surface tint', _ground, _bg),
-  schemeShadow(SkSection.screens, 'Shadow', _ground, _bg),
-  schemeScrim(SkSection.screens, 'Scrim', _ground, _bg);
+  schemeInverseSurface(SkSection.screens, _ground, _text),
+  schemeOnInverseSurface(SkSection.screens, _ink, _bg),
+  schemeInversePrimary(SkSection.screens, _mark, _bg),
+  schemeSurfaceTint(SkSection.screens, _ground, _bg),
+  schemeShadow(SkSection.screens, _ground, _bg),
+  schemeScrim(SkSection.screens, _ground, _bg);
 
-  const SkRole(this.section, this.label, this.kind, this.def);
+  const SkRole(this.section, this.kind, this.def);
   final SkSection section;
-  final String label;
   final SkKind kind;
   final SkDef def;
+
+  /// The name shown on the UI page (tool/sk_strings).
+  String get label => skTr('skRole_$name');
+
+  /// Whether this is one of the seven section icon colours, which have a
+  /// group of their own on the UI page.
+  bool get isSectionIcon => name.startsWith('section');
 
   static Iterable<SkRole> inSection(SkSection s) =>
       values.where((r) => r.section == s);
@@ -463,15 +454,28 @@ class SkPalette extends ThemeExtension<SkPalette> {
   }
 
   /// The colour of an icon that does [role].
-  Color icon(SkIconRole role) => this[switch (role) {
-    SkIconRole.call => SkRole.iconCall,
-    SkIconRole.message => SkRole.iconMessage,
-    SkIconRole.contact => SkRole.iconContact,
-    SkIconRole.share => SkRole.iconShare,
-    SkIconRole.view => SkRole.iconView,
-    SkIconRole.block => SkRole.iconBlock,
-    SkIconRole.delete => SkRole.delete,
-  }];
+  Color icon(SkIconRole role) =>
+      this[switch (role) {
+        SkIconRole.call => SkRole.iconCall,
+        SkIconRole.message => SkRole.iconMessage,
+        SkIconRole.contact => SkRole.iconContact,
+        SkIconRole.share => SkRole.iconShare,
+        SkIconRole.view => SkRole.iconView,
+        SkIconRole.block => SkRole.iconBlock,
+        SkIconRole.delete => SkRole.delete,
+      }];
+
+  /// The colour of the icon of [s], on its heading and its index chip.
+  Color section(SkSection s) =>
+      this[switch (s.kind) {
+        SkSectionKind.base => SkRole.sectionBase,
+        SkSectionKind.controls => SkRole.sectionControls,
+        SkSectionKind.words => SkRole.sectionWords,
+        SkSectionKind.frame => SkRole.sectionFrame,
+        SkSectionKind.reach => SkRole.sectionReach,
+        SkSectionKind.warning => SkRole.sectionWarning,
+        SkSectionKind.flash => SkRole.sectionFlash,
+      }];
 
   /// The palette of the 白い熊 獲得 UI, or null while it is switched off.
   static SkPalette? maybeOf(BuildContext context) =>

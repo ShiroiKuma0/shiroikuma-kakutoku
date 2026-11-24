@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:obtainium/components/sk_row_icons.dart';
 import 'package:obtainium/sk_material.dart';
 import 'package:obtainium/components/sk_pills.dart';
 import 'package:flutter/services.dart';
@@ -955,6 +956,8 @@ class ToggleTile extends StatelessWidget {
         // Fork: a switch that cannot be flipped says so with its whole row, not
         // just with a greyed-out thumb at the far end of it.
         enabled: onChanged != null,
+        // Fork: every row has an icon, coloured by what the row does.
+        leading: skToggleLeading(context, label),
         title: Text(label),
         subtitle: subtitle,
         shape: tileShape,

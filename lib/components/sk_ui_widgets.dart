@@ -9,7 +9,9 @@
 
 import 'dart:math' as math;
 
+import 'package:easy_localization/easy_localization.dart' show tr;
 import 'package:file_picker/file_picker.dart';
+import 'package:obtainium/sk_strings.dart';
 import 'package:obtainium/components/sk_pills.dart';
 import 'package:obtainium/providers/sk_ui_provider.dart';
 import 'package:obtainium/sk_material.dart';
@@ -39,6 +41,7 @@ const double _iconGap = 10;
 
 /// The icon of each section, shown on its heading and its index chip.
 IconData skSectionIcon(SkSection s) => switch (s) {
+  SkSection.language => Icons.language,
   SkSection.eximport => Icons.import_export,
   SkSection.general => Icons.toggle_on_outlined,
   SkSection.foundation => Icons.palette_outlined,
@@ -158,7 +161,7 @@ class SkSectionHeader extends StatelessWidget {
                 Icon(
                   skSectionIcon(section),
                   size: skRowIconSize(style),
-                  color: p.icon(section.role),
+                  color: p.section(section),
                 ),
                 const SizedBox(width: _iconGap),
                 Expanded(
@@ -660,7 +663,7 @@ class SkColorRow extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Tooltip(
-                  message: 'Back to the default',
+                  message: SkStr.backToDefault.t,
                   child: Icon(
                     Icons.restart_alt,
                     size: 20,
@@ -694,9 +697,18 @@ class SkColorRow extends StatelessWidget {
 /// The swatch rows of every colour role that belongs to [section], each with
 /// its own reset.
 class SkRoleRows extends StatelessWidget {
-  const SkRoleRows(this.section, {super.key, this.level = 1});
+  const SkRoleRows(
+    this.section, {
+    super.key,
+    this.level = 1,
+    this.sectionIcons,
+  });
   final SkSection section;
   final int level;
+
+  /// Null: every role of the section. Otherwise only the seven section icon
+  /// colours (true) or only the rest (false).
+  final bool? sectionIcons;
 
   @override
   Widget build(BuildContext context) {
@@ -706,7 +718,8 @@ class SkRoleRows extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final role in SkRole.inSection(section))
-          _RoleRow(sk: sk, palette: p, role: role, level: level),
+          if (sectionIcons == null || role.isSectionIcon == sectionIcons)
+            _RoleRow(sk: sk, palette: p, role: role, level: level),
       ],
     );
   }
@@ -733,7 +746,7 @@ class _RoleRow extends StatelessWidget {
     return SkColorRow(
       label: role.label,
       icon: skKindIcon(role.kind),
-      iconColor: palette.icon(role.section.role),
+      iconColor: palette.section(role.section),
       color: before,
       level: level,
       onChanged: (c) => sk.setRole(
@@ -818,6 +831,13 @@ class _SkSectionIndexState extends State<SkSectionIndex> {
     final p = SkPalette.of(context);
     final alpha = ghost ? skDisabledAlpha : 1.0;
     final ink = p[SkRole.pageChipLabel].withValues(alpha: alpha);
+    final label = theme.textTheme.bodyMedium?.copyWith(
+      fontSize: 12,
+      height: 1.1,
+      color: ink,
+      fontWeight: FontWeight.normal,
+      decoration: TextDecoration.none,
+    );
     return Material(
       type: lifted ? MaterialType.canvas : MaterialType.transparency,
       color: lifted ? theme.scaffoldBackgroundColor : null,
@@ -838,22 +858,15 @@ class _SkSectionIndexState extends State<SkSectionIndex> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // The section's icon in the section's colour — the same
+              // drawable and colour as on its heading — sized by the label.
               Icon(
                 skSectionIcon(s),
-                size: 15,
-                color: p.icon(s.role).withValues(alpha: alpha),
+                size: 1.25 * (label?.fontSize ?? 12),
+                color: p.section(s).withValues(alpha: alpha),
               ),
               const SizedBox(width: 5),
-              Text(
-                s.title,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontSize: 12,
-                  height: 1.1,
-                  color: ink,
-                  fontWeight: FontWeight.normal,
-                  decoration: TextDecoration.none,
-                ),
-              ),
+              Text(s.title, style: label),
             ],
           ),
         ),
@@ -1036,7 +1049,7 @@ class _SkColorPickerDialogState extends State<_SkColorPickerDialog> {
                     children: [
                       _swatchBox(widget.initial),
                       const SizedBox(height: 2),
-                      Text('old', style: small),
+                      Text(SkStr.oldColour.t, style: small),
                     ],
                   ),
                 ),
@@ -1069,11 +1082,11 @@ class _SkColorPickerDialogState extends State<_SkColorPickerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(tr('cancel')),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(current),
-          child: const Text('Use this colour'),
+          child: Text(SkStr.useThisColour.t),
         ),
       ],
     );
@@ -1142,11 +1155,7 @@ class _SkFontPickerDialogState extends State<_SkFontPickerDialog> {
       if (path != null) {
         final family = await sk.importFont(path);
         if (family == null) {
-          messenger.showSnackBar(
-            const SnackBar(
-              content: Text('Please pick a .ttf or .otf font file'),
-            ),
-          );
+          messenger.showSnackBar(SnackBar(content: Text(SkStr.pickFontFile.t)));
         }
       }
     } finally {
@@ -1159,13 +1168,13 @@ class _SkFontPickerDialogState extends State<_SkFontPickerDialog> {
     final sk = context.watch<SkUiProvider>();
     final p = SkPalette.of(context);
     final options = <(String, String)>[
-      ('', 'App default (Montserrat)'),
-      ('SystemFont', 'System font'),
-      (skMonospaceFamily, 'Monospace'),
+      ('', SkStr.fontDefault.t),
+      ('SystemFont', SkStr.fontSystem.t),
+      (skMonospaceFamily, SkStr.fontMono.t),
       for (final f in sk.externalFonts) (f, f),
     ];
     return AlertDialog(
-      title: const Text('Font'),
+      title: Text(SkStr.font.t),
       contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
       content: SizedBox(
         width: 340,
@@ -1219,7 +1228,7 @@ class _SkFontPickerDialogState extends State<_SkFontPickerDialog> {
                       if (sk.externalFonts.contains(family))
                         IconButton(
                           visualDensity: VisualDensity.compact,
-                          tooltip: 'Delete this font',
+                          tooltip: SkStr.deleteFont.t,
                           icon: Icon(
                             Icons.delete_outline,
                             size: 18,
@@ -1240,7 +1249,7 @@ class _SkFontPickerDialogState extends State<_SkFontPickerDialog> {
               color: p[SkRole.menuDivider],
             ),
             SkActionRow(
-              label: importing ? 'Importing…' : 'Add a font (.ttf / .otf)',
+              label: importing ? SkStr.importing.t : SkStr.addFont.t,
               icon: Icons.add,
               opens: true,
               level: 0,
@@ -1252,7 +1261,7 @@ class _SkFontPickerDialogState extends State<_SkFontPickerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(tr('cancel')),
         ),
       ],
     );

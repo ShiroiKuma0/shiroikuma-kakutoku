@@ -7,6 +7,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:obtainium/providers/sk_ui_provider.dart';
+import 'package:obtainium/sk_strings.dart';
 import 'package:obtainium/sk_theme.dart';
 
 // ---------------------------------------------------------------------------
@@ -291,6 +292,7 @@ bool _isWayOut(String label) {
   for (final key in const ['cancel', 'close', 'no', 'dismiss']) {
     if (upper == tr(key).toUpperCase()) return true;
   }
+  if (upper == SkStr.later.t.toUpperCase()) return true;
   return const {
     'CANCEL',
     'CLOSE',
@@ -330,7 +332,10 @@ String? _labelOf(Widget action) {
 /// out (Cancel, Close, No…) is the main pill — a button upstream drew filled
 /// wins where there are several — and the rest are regular. With
 /// [destructive], or a label that deletes, the main pill is red.
-List<Widget>? skDialogActions(List<Widget>? actions, {bool destructive = false}) {
+List<Widget>? skDialogActions(
+  List<Widget>? actions, {
+  bool destructive = false,
+}) {
   if (actions == null) return null;
   final candidates = [
     for (final a in actions)
@@ -480,10 +485,7 @@ class _SkMenuItemState<T> extends PopupMenuItemState<T, SkMenuItem<T>> {
           SizedBox(width: size),
         if (widget.icon != null || widget.iconColumn) const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            widget.label,
-            style: base?.copyWith(color: rowColor),
-          ),
+          child: Text(widget.label, style: base?.copyWith(color: rowColor)),
         ),
         if (toggle) ...[
           const SizedBox(width: 8),
@@ -574,6 +576,9 @@ class _SkMenuDividerState extends State<SkMenuDivider> {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    child: Container(height: 1, color: SkPalette.of(context)[SkRole.menuDivider]),
+    child: Container(
+      height: 1,
+      color: SkPalette.of(context)[SkRole.menuDivider],
+    ),
   );
 }

@@ -2,13 +2,18 @@
 // the role table's defaults, the theme built from it, the dialog buttons, and
 // the real 白い熊 獲得 UI page from its top.
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:obtainium/components/sk_language.dart';
 import 'package:obtainium/components/sk_pills.dart';
 import 'package:obtainium/components/sk_ui_widgets.dart';
 import 'package:obtainium/pages/sk_ui_page.dart';
 import 'package:obtainium/providers/settings_provider.dart';
 import 'package:obtainium/providers/sk_ui_provider.dart';
 import 'package:obtainium/sk_material.dart';
+import 'package:obtainium/sk_strings.dart';
 import 'package:obtainium/sk_theme.dart';
 import 'package:provider/provider.dart';
 
@@ -32,11 +37,11 @@ void main() {
       expect(p[SkRole.switchOffDot].toARGB32(), 0xFF8C8C00);
       expect(p[SkRole.menuDivider].toARGB32(), 0xFFB3B300);
       expect(p[SkRole.pageNote].toARGB32(), 0xFFC8C800);
-      expect(p.icon(SkIconRole.call).toARGB32(), 0xFF00FF00);
-      expect(p.icon(SkIconRole.message).toARGB32(), 0xFF4D94FF);
-      expect(p.icon(SkIconRole.contact).toARGB32(), 0xFF00FFFF);
+      expect(p.icon(SkIconRole.call).toARGB32(), 0xFF00A550);
+      expect(p.icon(SkIconRole.message).toARGB32(), 0xFF0066FF);
+      expect(p.icon(SkIconRole.contact).toARGB32(), 0xFF00B0FF);
       expect(p.icon(SkIconRole.share).toARGB32(), 0xFFFF8000);
-      expect(p.icon(SkIconRole.block).toARGB32(), 0xFFFF00FF);
+      expect(p.icon(SkIconRole.block).toARGB32(), 0xFFFF3D7F);
       expect(p.icon(SkIconRole.delete).toARGB32(), 0xFFFF0000);
       expect(p.icon(SkIconRole.view), skYellow);
     });
@@ -71,6 +76,7 @@ void main() {
       final names = SkRole.values.map((r) => r.name).toSet();
       expect(names.length, SkRole.values.length);
       const plain = {
+        SkSection.language,
         SkSection.eximport,
         SkSection.general,
         SkSection.foundation,
@@ -94,6 +100,202 @@ void main() {
       expect(skIconRoleFor(Icons.palette_outlined), SkIconRole.contact);
       expect(skIconRoleFor(Icons.close), SkIconRole.block);
       expect(skIconRoleFor(Icons.settings_outlined), SkIconRole.view);
+    });
+  });
+
+  group('section icons', () {
+    final p = SkPalette(SkUiKnobs());
+
+    test('seven colours, each with one meaning', () {
+      expect(p.section(SkSection.general), skYellow);
+      expect(p.section(SkSection.buttons).toARGB32(), 0xFF00A550);
+      expect(p.section(SkSection.text).toARGB32(), 0xFF00B0FF);
+      expect(p.section(SkSection.lists).toARGB32(), 0xFF0066FF);
+      expect(p.section(SkSection.eximport).toARGB32(), 0xFFFF8000);
+      expect(p.section(SkSection.maintenance).toARGB32(), 0xFFFF0000);
+      expect(p.section(SkSection.messages).toARGB32(), 0xFFFF3D7F);
+      // Every kind is used, and the brief flash by one section only.
+      expect(
+        SkSection.values.map((s) => s.kind).toSet(),
+        SkSectionKind.values.toSet(),
+      );
+      expect(
+        SkSection.values.where((s) => s.kind == SkSectionKind.flash).length,
+        1,
+      );
+    });
+
+    test('no two neighbours share a colour in the default order', () {
+      void check(List<SkSection> order) {
+        for (var i = 1; i < order.length; i++) {
+          expect(
+            order[i].kind,
+            isNot(order[i - 1].kind),
+            reason: '${order[i - 1].name} / ${order[i].name}',
+          );
+        }
+      }
+
+      check(SkSection.values);
+      // What the page shows while the 白い熊 獲得 UI is switched off.
+      check(const [
+        SkSection.language,
+        SkSection.eximport,
+        SkSection.general,
+        SkSection.maintenance,
+      ]);
+    });
+
+    test('the seven colours are roles of their own', () {
+      final k = SkUiKnobs()..roles[SkRole.sectionControls.name] = 0xFF112233;
+      expect(SkPalette(k).section(SkSection.switches).toARGB32(), 0xFF112233);
+      // Not the row icon roles: the menu's green stays where it was.
+      expect(SkPalette(k).icon(SkIconRole.call).toARGB32(), 0xFF00A550);
+      expect(SkRole.values.where((r) => r.isSectionIcon).length, 7);
+    });
+  });
+
+  group('app language', () {
+    test('it is the first section, a globe in the light blue of words', () {
+      expect(SkSection.values.first, SkSection.language);
+      expect(SkSection.language.kind, SkSectionKind.words);
+      expect(skSectionIcon(SkSection.language), Icons.language);
+      expect(SkSection.values[1].kind, isNot(SkSectionKind.words));
+    });
+
+    test('Japanese and English first, then the rest by name', () {
+      expect(skLanguages[0].locale, const Locale('ja'));
+      expect(skLanguages[1].locale, const Locale('en'));
+      final rest = skLanguages.skip(2).map((l) => l.name).toList();
+      expect(rest, [...rest]..sort());
+    });
+
+    test('the Android declaration holds the same short list', () {
+      final xml = File(
+        'android/app/src/main/res/xml/locales_config.xml',
+      ).readAsStringSync();
+      final declared = RegExp(
+        'android:name="([^"]+)"',
+      ).allMatches(xml).map((m) => m.group(1)).toSet();
+      expect(
+        declared,
+        skLanguages.map((l) => l.locale.toLanguageTag()).toSet(),
+      );
+    });
+
+    test('only languages translated four fifths or more are listed', () {
+      // Every string counts, the forms of a plural each by itself.
+      Map<String, String> load(String name) {
+        final flat = <String, String>{};
+        void walk(Map<String, dynamic> map, String prefix) {
+          for (final e in map.entries) {
+            if (e.value is Map<String, dynamic>) {
+              walk(e.value as Map<String, dynamic>, '$prefix${e.key}.');
+            } else {
+              flat['$prefix${e.key}'] = '${e.value}';
+            }
+          }
+        }
+
+        walk(
+          jsonDecode(File('assets/translations/$name.json').readAsStringSync())
+              as Map<String, dynamic>,
+          '',
+        );
+        return flat;
+      }
+
+      final en = load('en');
+      // The fork's own strings exist in English and Japanese only, and do
+      // not count against a language.
+      final keys = en.keys.where((k) => !skEnglish.containsKey(k)).toList();
+      for (final l in skLanguages.skip(2)) {
+        final t = load(l.locale.toLanguageTag());
+        final done = keys.where((k) => t[k] != en[k]).length;
+        expect(done / keys.length, greaterThan(0.8), reason: l.name);
+      }
+    });
+
+    test('a language chosen earlier that is not listed stays offered', () {
+      expect(skOfferedLanguages(const Locale('ja')), skLanguages);
+      expect(skOfferedLanguages(null), skLanguages);
+      final offered = skOfferedLanguages(const Locale('cs'));
+      expect(offered.length, skLanguages.length + 1);
+      expect(offered.last.locale, const Locale('cs'));
+      expect(offered.last.name, 'Česky');
+    });
+
+    testWidgets('only the current language sits in a pill', (tester) async {
+      Locale? picked = const Locale('en');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildSkTheme(SkUiKnobs(), 'Montserrat'),
+          home: Scaffold(
+            body: SkLanguageList(
+              current: const Locale('ja'),
+              onPick: (l) => picked = l,
+            ),
+          ),
+        ),
+      );
+      expect(find.text('System default'), findsOneWidget);
+      expect(find.text('ja-JP'), findsOneWidget);
+      expect(find.text('日本'), findsOneWidget);
+      final pills = tester
+          .widgetList<Material>(find.byType(Material))
+          .where((m) => m.shape is StadiumBorder)
+          .toList();
+      expect(pills.length, 1);
+      expect((pills.single.shape! as StadiumBorder).side.width, 3);
+      expect(
+        tester.widget<Text>(find.text('日本語')).style!.fontWeight,
+        FontWeight.bold,
+      );
+      expect(
+        tester.widget<Text>(find.text('English')).style!.fontWeight,
+        FontWeight.normal,
+      );
+      await tester.tap(find.text('System default'));
+      expect(picked, isNull);
+    });
+  });
+
+  group('strings', () {
+    Map<String, dynamic> locale(String name) =>
+        jsonDecode(File('assets/translations/$name.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final en = locale('en');
+    final ja = locale('ja');
+
+    test('every string of the fork has a key, in English as in the code', () {
+      for (final e in skEnglish.entries) {
+        expect(en[e.key], e.value, reason: e.key);
+      }
+      for (final s in SkStr.values) {
+        expect(skEnglish, contains('skStr_${s.name}'));
+      }
+      for (final s in SkSection.values) {
+        expect(skEnglish, contains('skSection_${s.name}'));
+      }
+      for (final b in SkBase.values) {
+        expect(skEnglish, contains('skBase_${b.name}'));
+      }
+      for (final r in SkRole.values) {
+        expect(skEnglish, contains('skRole_${r.name}'));
+      }
+    });
+
+    test('Japanese has every key, and every fork string translated', () {
+      expect(en.keys.toSet().difference(ja.keys.toSet()), isEmpty);
+      final holes = RegExp(r'\{\}');
+      for (final key in skEnglish.keys) {
+        expect(ja[key], isNot(en[key]), reason: '$key is not translated');
+        expect(
+          holes.allMatches(ja[key] as String).length,
+          holes.allMatches(en[key] as String).length,
+          reason: '$key: placeholders differ',
+        );
+      }
     });
   });
 
@@ -246,22 +448,64 @@ void main() {
         // Once on its chip, once on its heading.
         expect(find.text(s.title), findsNWidgets(2), reason: s.name);
       }
-      expect(find.byType(SkSectionHeader), findsNWidgets(SkSection.values.length));
+      expect(
+        find.byType(SkSectionHeader),
+        findsNWidgets(SkSection.values.length),
+      );
       // Folded: no row of any section is built.
       expect(find.byType(SkRoleRows), findsNothing);
       expect(find.byType(SkSwitchRow), findsNothing);
       expect(find.byType(SkSliderRow), findsNothing);
-      expect(find.byIcon(Icons.chevron_right), findsNWidgets(SkSection.values.length));
+      expect(
+        find.byIcon(Icons.chevron_right),
+        findsNWidgets(SkSection.values.length),
+      );
       expect(find.byIcon(Icons.expand_more), findsNothing);
+    });
+
+    testWidgets('heading and chip carry the same icon in the same colour, '
+        'and chips are as wide as their content', (tester) async {
+      await open(tester);
+      final p = SkPalette(sk.knobs);
+      final widths = <double>{};
+      for (final s in SkSection.values) {
+        final chipText = find.descendant(
+          of: find.byType(SkSectionIndex),
+          matching: find.text(s.title),
+        );
+        final chip = find
+            .ancestor(of: chipText, matching: find.byType(Row))
+            .first;
+        final chipIcon = tester.widget<Icon>(
+          find.descendant(of: chip, matching: find.byType(Icon)),
+        );
+        final headIcon = tester.widget<Icon>(
+          find
+              .descendant(
+                of: find.byWidgetPredicate(
+                  (w) => w is SkSectionHeader && w.section == s,
+                ),
+                matching: find.byType(Icon),
+              )
+              .first,
+        );
+        expect(chipIcon.icon, headIcon.icon, reason: s.name);
+        expect(chipIcon.color, p.section(s), reason: s.name);
+        expect(headIcon.color, p.section(s), reason: s.name);
+        widths.add(tester.getSize(chip).width);
+      }
+      expect(widths.length, greaterThan(SkSection.values.length ~/ 2));
     });
 
     testWidgets('a tap on a heading unfolds it, and the state is kept', (
       tester,
     ) async {
       await open(tester);
-      await tester.tap(find.byType(SkSectionHeader).at(
-        SkSection.values.indexOf(SkSection.buttons),
-      ));
+      await tester.tap(
+        find
+            .byType(SkSectionHeader)
+            .at(SkSection.values.indexOf(SkSection.buttons)),
+      );
       await tester.pump();
       expect(find.text('Main button frame'), findsOneWidget);
       expect(sk.knobs.sectionsOpen, ['buttons']);
@@ -296,19 +540,32 @@ void main() {
 
     testWidgets('the sections follow the stored order', (tester) async {
       await open(tester);
+      // An order stored before “App language” existed gets it first.
       sk.setSectionOrder(['maintenance', 'buttons']);
       await tester.pump();
-      final headers = tester
+      var headers = tester
+          .widgetList<SkSectionHeader>(find.byType(SkSectionHeader))
+          .map((h) => h.section)
+          .toList();
+      expect(headers[0], SkSection.language);
+      expect(headers[1], SkSection.maintenance);
+      expect(headers[2], SkSection.buttons);
+      expect(headers.length, SkSection.values.length);
+      // An order that names it leaves it where it was dragged.
+      sk.setSectionOrder(['maintenance', 'language', 'buttons']);
+      await tester.pump();
+      headers = tester
           .widgetList<SkSectionHeader>(find.byType(SkSectionHeader))
           .map((h) => h.section)
           .toList();
       expect(headers[0], SkSection.maintenance);
-      expect(headers[1], SkSection.buttons);
-      expect(headers.length, SkSection.values.length);
+      expect(headers[1], SkSection.language);
       sk.resetSectionOrder();
       await tester.pump();
       expect(
-        tester.widget<SkSectionHeader>(find.byType(SkSectionHeader).first).section,
+        tester
+            .widget<SkSectionHeader>(find.byType(SkSectionHeader).first)
+            .section,
         SkSection.values.first,
       );
     });
@@ -326,7 +583,12 @@ void main() {
         tester
             .widgetList<SkSectionHeader>(find.byType(SkSectionHeader))
             .map((h) => h.section),
-        [SkSection.eximport, SkSection.general, SkSection.maintenance],
+        [
+          SkSection.language,
+          SkSection.eximport,
+          SkSection.general,
+          SkSection.maintenance,
+        ],
       );
     });
 

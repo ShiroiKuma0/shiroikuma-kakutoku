@@ -6,6 +6,7 @@ import 'package:equations/equations.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:shizuku_apk_installer/shizuku_apk_installer.dart'
     hide InstallerMode;
+import 'package:obtainium/components/sk_language.dart';
 import 'package:obtainium/components/category_editor.dart';
 import 'package:obtainium/sk_material.dart';
 import 'package:obtainium/components/sk_pills.dart';
@@ -15,7 +16,6 @@ import 'package:obtainium/custom_errors.dart';
 import 'package:obtainium/core/logging/app_logger.dart';
 import 'package:obtainium/installers/root_installer.dart';
 import 'package:obtainium/installers/shizuku_installer.dart';
-import 'package:obtainium/main.dart';
 import 'package:obtainium/pages/import_export.dart';
 import 'package:obtainium/pages/sk_ui_page.dart';
 import 'package:obtainium/pages/pinned_certificates.dart';
@@ -482,9 +482,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   context,
                   icon: Icons.brush_outlined,
                   title: '白い熊 獲得 UI',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SkUiPage()),
-                  ),
+                  onTap: () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const SkUiPage())),
                 ),
               ]),
             ),
@@ -535,7 +535,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   },
                 ),
               ]),
-
             ),
           ],
         ),
@@ -1847,8 +1846,10 @@ class _LocaleDropdown extends StatelessWidget {
       initialSelection: forcedLocale,
       dropdownMenuEntries: [
         DropdownMenuEntry<Locale?>(value: null, label: tr('followSystem')),
-        ...supportedLocales.map(
-          (e) => DropdownMenuEntry<Locale?>(value: e.key, label: e.value),
+        // Fork: the short list of lib/components/sk_language.dart, which
+        // the 白い熊 獲得 UI page offers too — not every language shipped.
+        ...skOfferedLanguages(forcedLocale).map(
+          (l) => DropdownMenuEntry<Locale?>(value: l.locale, label: l.name),
         ),
       ],
       onSelected: (value) {

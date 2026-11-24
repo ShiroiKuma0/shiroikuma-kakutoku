@@ -11,7 +11,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:easy_localization/easy_localization.dart' show tr;
 import 'package:file_picker/file_picker.dart';
+import 'package:obtainium/sk_strings.dart';
 import 'package:obtainium/sk_material.dart';
 import 'package:obtainium/sk_theme.dart';
 import 'package:flutter/services.dart';
@@ -21,7 +23,6 @@ import 'package:obtainium/providers/sk_ui_provider.dart';
 import 'package:obtainium/providers/source_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_storage/shared_storage.dart' as saf;
-
 
 const String skExportFormat = 'kakutoku-export';
 
@@ -67,7 +68,13 @@ enum SkExportCat {
   // ignore: unused_element_parameter
   const SkExportCat(this.id, this.label, {this.defaultSelected = true});
   final String id;
+
+  /// The English name: part of the automation contract (LIST_CATEGORIES, the
+  /// progress lines a sister app shows), so it is never translated.
   final String label;
+
+  /// The name this app's own screens show.
+  String get title => skTr('skCat_$name');
   final bool defaultSelected;
 }
 
@@ -97,7 +104,8 @@ String skTimestamp([DateTime? at]) {
       '_${_pad2(now.hour)}-${_pad2(now.minute)}-${_pad2(now.second)}';
 }
 
-String skExportFileName([DateTime? at]) => '$skExportPrefix${skTimestamp(at)}.zip';
+String skExportFileName([DateTime? at]) =>
+    '$skExportPrefix${skTimestamp(at)}.zip';
 
 /// Byte count for display (`4.6 MB`, `1.20 GB`) — the automation caller cannot
 /// stat the file, so this app computes it.
@@ -174,7 +182,7 @@ Future<SkExportStatus> skLastExportStatus(
   final run = () async {
     // Wait for any previous query (shared platform event channel), but
     // never inherit its hang.
-    progress?.call('waiting for a previous directory check…');
+    progress?.call(SkStr.stWaiting.t);
     try {
       await prev.timeout(const Duration(seconds: 15));
     } catch (_) {}
@@ -203,17 +211,17 @@ Future<SkExportStatus> _lastExportStatusInner(
   SettingsProvider sp,
   void Function(String stage)? progress,
 ) async {
-  progress?.call('checking the export directory…');
+  progress?.call(SkStr.stChecking.t);
   Uri? dir;
   var failure = '';
   try {
     dir = await sp.getExportDir().timeout(const Duration(seconds: 8));
   } on TimeoutException {
     dir = null;
-    failure = 'The directory permission check timed out.';
+    failure = SkStr.stPermTimeout.t;
   } catch (e) {
     dir = null;
-    failure = 'The directory check failed: $e';
+    failure = SkStr.stCheckFailed.f(['$e']);
   }
   if (dir == null) {
     if (failure.isNotEmpty) {
@@ -230,13 +238,11 @@ Future<SkExportStatus> _lastExportStatusInner(
     }
     return SkExportStatus(
       dirSet: false,
-      message: failure.isNotEmpty
-          ? '⚠ $failure'
-          : '⚠ No export directory set — your 白い熊 獲得 setup is NOT backed up',
+      message: failure.isNotEmpty ? '⚠ $failure' : SkStr.stNoDir.t,
     );
   }
   final dirName = _dirDisplayName(dir);
-  progress?.call('listing “$dirName”…');
+  progress?.call(SkStr.stListing.f([dirName]));
   String? newestTs;
   var listFailure = '';
   try {
@@ -255,24 +261,28 @@ Future<SkExportStatus> _lastExportStatusInner(
       if (newestTs == null || ts.compareTo(newestTs) > 0) newestTs = ts;
     }
   } on TimeoutException {
-    listFailure = 'Listing the directory timed out.';
+    listFailure = SkStr.stListTimeout.t;
   } catch (e) {
-    listFailure = 'Listing the directory failed: $e';
+    listFailure = SkStr.stListFailed.f(['$e']);
   }
   if (listFailure.isNotEmpty) {
-    return SkExportStatus(dirSet: true, dirName: dirName, message: '⚠ $listFailure');
+    return SkExportStatus(
+      dirSet: true,
+      dirName: dirName,
+      message: '⚠ $listFailure',
+    );
   }
   if (newestTs == null) {
     return SkExportStatus(
       dirSet: true,
       dirName: dirName,
-      message: 'No export in this directory yet.',
+      message: SkStr.stNoExport.t,
     );
   }
   return SkExportStatus(
     dirSet: true,
     dirName: dirName,
-    message: 'Last exported: $newestTs',
+    message: SkStr.stLastExport.f([newestTs]),
   );
 }
 
@@ -503,7 +513,11 @@ Future<String> skApplyImport({
   required AppsProvider appsProvider,
   required SettingsProvider settingsProvider,
   required SkUiProvider skUiProvider,
+  // The panel shows the summary to the person; the automation hands it to a
+  // sister app, which gets the contract's English names.
+  bool localized = false,
 }) async {
+  String name(SkExportCat cat) => localized ? cat.title : cat.label;
   if (decoded['format'] != skExportFormat) {
     throw 'not a 白い熊 獲得 export file';
   }
@@ -540,7 +554,7 @@ Future<String> skApplyImport({
         }
         await appsProvider.saveApps(apps, onlyIfExists: false);
         appsProvider.addMissingCategories(settingsProvider);
-        parts.add('${cat.label}: ${apps.length}');
+        parts.add('${name(cat)}: ${apps.length}');
       case SkExportCat.appSettings:
       case SkExportCat.creds:
         var n = 0;
@@ -551,7 +565,7 @@ Future<String> skApplyImport({
           await _applyPref(settingsProvider, e.key, e.value);
           n++;
         }
-        parts.add('${cat.label}: $n');
+        parts.add('${name(cat)}: $n');
       case SkExportCat.categories:
         final imported = (d as Map<String, dynamic>).map(
           (k, v) => MapEntry(k, (v as num).toInt()),
@@ -560,7 +574,7 @@ Future<String> skApplyImport({
           ...settingsProvider.categories,
           ...imported,
         });
-        parts.add('${cat.label}: ${imported.length}');
+        parts.add('${name(cat)}: ${imported.length}');
       case SkExportCat.skUi:
         SkUiKnobs? knobs;
         if (d is Map && d['knobs'] is Map<String, dynamic>) {
@@ -590,12 +604,19 @@ Future<String> skApplyImport({
           }
         }
         skUiProvider.applyImported(newKnobs: knobs, colors: colors);
-        parts.add('${cat.label}: knobs + $nFonts font(s)');
+        parts.add(
+          localized
+              ? SkStr.knobsAndFonts.f([cat.title, '$nFonts'])
+              : '${cat.label}: knobs + $nFonts font(s)',
+        );
     }
   }
   // Written is not landed. Nobody is told this succeeded until it has.
   await skFlushSettingsWrites(settingsProvider);
-  return parts.isEmpty ? 'nothing imported' : parts.join('\n');
+  if (parts.isEmpty) {
+    return localized ? SkStr.nothingImported.t : 'nothing imported';
+  }
+  return parts.join('\n');
 }
 
 /// Relaunches the app (Kōjiki-style: restart activity task + exit).
@@ -691,7 +712,10 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
         },
       );
     } catch (e) {
-      st = SkExportStatus(dirSet: false, message: '⚠ Status check failed: $e');
+      st = SkExportStatus(
+        dirSet: false,
+        message: SkStr.statusCheckFailed.f(['$e']),
+      );
     }
     if (mounted) setState(() => _status = st);
   }
@@ -712,7 +736,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
   Future<void> _export() async {
     final cats = _selected();
     if (cats.isEmpty) {
-      setState(() => _error = 'No categories selected.');
+      setState(() => _error = SkStr.noCategories.t);
       return;
     }
     final appsProvider = context.read<AppsProvider>();
@@ -723,7 +747,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
       await _pickDir();
       dir = await settingsProvider.getExportDir();
       if (dir == null) {
-        if (mounted) setState(() => _error = 'No export directory set.');
+        if (mounted) setState(() => _error = SkStr.noExportDir.t);
         return;
       }
     }
@@ -745,15 +769,17 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
         mimeType: 'application/zip',
         bytes: bytes,
       );
-      if (result == null) throw 'could not create the file in the directory';
+      if (result == null) throw SkStr.cannotCreateFile.t;
       if (!mounted) return;
       setState(() => _busy = false);
       await _showResultDialog(
-        title: '✓ Export finished',
-        body:
-            'Exported:\n$name\n'
-            '${cats.length} categories · ${skHumanSize(bytes.length)}',
-        buttons: const [('OK', 'ok')],
+        title: SkStr.exportDone.t,
+        body: SkStr.exportDoneBody.f([
+          name,
+          '${cats.length}',
+          skHumanSize(bytes.length),
+        ]),
+        buttons: [(tr('ok'), 'ok')],
       );
       // Acknowledged → close the chain (panel now, UI page by the caller).
       if (mounted) Navigator.of(context).pop(true);
@@ -761,7 +787,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = 'Export failed: $e';
+          _error = SkStr.exportFailed.f(['$e']);
         });
       }
     }
@@ -770,7 +796,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
   Future<void> _import() async {
     final cats = _selected();
     if (cats.isEmpty) {
-      setState(() => _error = 'No categories selected.');
+      setState(() => _error = SkStr.noCategories.t);
       return;
     }
     final appsProvider = context.read<AppsProvider>();
@@ -780,7 +806,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
     try {
       picked = await FilePicker.pickFile();
     } catch (e) {
-      if (mounted) setState(() => _error = 'No file picker available.');
+      if (mounted) setState(() => _error = SkStr.noFilePicker.t);
       return;
     }
     final path = picked?.path;
@@ -798,13 +824,14 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
         appsProvider: appsProvider,
         settingsProvider: settingsProvider,
         skUiProvider: skUiProvider,
+        localized: true,
       );
       if (!mounted) return;
       setState(() => _busy = false);
       final action = await _showResultDialog(
-        title: '✓ Import finished',
-        body: 'Restored:\n\n$summary\n\nRestart to apply everything.',
-        buttons: const [('Later', 'later'), ('Restart now', 'restart')],
+        title: SkStr.importDone.t,
+        body: SkStr.importDoneBody.f([summary]),
+        buttons: [(SkStr.later.t, 'later'), (SkStr.restartNow.t, 'restart')],
       );
       if (action == 'restart') {
         await skRestartApp();
@@ -816,7 +843,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = 'Import failed: $e';
+          _error = SkStr.importFailed.f(['$e']);
         });
       }
     }
@@ -935,7 +962,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
           children: [
             Center(
               child: Text(
-                'Export / Import — 白い熊 獲得',
+                SkStr.panelTitle.t,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: p[SkRole.dialogTitle],
@@ -944,9 +971,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Save or restore everything by category — the tracked apps '
-              'and their sources, settings, credentials, categories, and '
-              'the 白い熊 獲得 UI.',
+              SkStr.panelNote.t,
               style: theme.textTheme.bodySmall?.copyWith(color: dim),
             ),
             const SizedBox(height: 10),
@@ -966,13 +991,11 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Export directory (tap to choose)',
+                      SkStr.panelDir.t,
                       style: theme.textTheme.bodySmall?.copyWith(color: dim),
                     ),
                     Text(
-                      st == null
-                          ? '…'
-                          : (st.dirName ?? 'Not set — tap to choose a directory'),
+                      st == null ? '…' : (st.dirName ?? SkStr.panelDirNotSet.t),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: (st?.dirSet ?? true) ? accent : warn,
@@ -993,7 +1016,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
             const SizedBox(height: 10),
             divider,
             _checkRow(
-              'Select all',
+              tr('selectAll'),
               bold: true,
               value: _selectAll,
               onChanged: (v) => setState(() {
@@ -1005,7 +1028,7 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
             ),
             for (final cat in SkExportCat.values)
               _checkRow(
-                cat.label,
+                cat.title,
                 value: _checked[cat] ?? false,
                 onChanged: (v) => setState(() => _checked[cat] = v),
               ),
@@ -1027,16 +1050,16 @@ class _SkEximportPanelState extends State<_SkEximportPanel> {
             Row(
               children: [
                 SkPillButton(
-                  'Cancel',
+                  tr('cancel'),
                   onPressed: _busy
                       ? null
                       : () => Navigator.of(context).pop(false),
                 ),
                 const Spacer(),
-                SkPillButton('Import', onPressed: _busy ? null : _import),
+                SkPillButton(SkStr.import.t, onPressed: _busy ? null : _import),
                 const SizedBox(width: 8),
                 SkPillButton(
-                  'Export',
+                  SkStr.export.t,
                   main: true,
                   onPressed: _busy ? null : _export,
                 ),

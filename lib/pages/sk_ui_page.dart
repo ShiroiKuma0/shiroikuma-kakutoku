@@ -12,7 +12,10 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:easy_localization/easy_localization.dart' show tr;
+import 'package:obtainium/sk_strings.dart';
 import 'package:obtainium/components/sk_eximport.dart';
+import 'package:obtainium/components/sk_language.dart';
 import 'package:obtainium/components/sk_ui_widgets.dart';
 import 'package:obtainium/providers/settings_provider.dart';
 import 'package:obtainium/providers/sk_automation.dart';
@@ -112,9 +115,9 @@ class _SkUiPageState extends State<SkUiPage> {
   Future<void> _copyToken() async {
     await Clipboard.setData(ClipboardData(text: _automationToken));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Automation token copied to the clipboard')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(SkStr.tokenCopied.t)));
   }
 
   /// A yes / no question; [destructive] makes the confirming pill red.
@@ -133,7 +136,7 @@ class _SkUiPageState extends State<SkUiPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(tr('cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -149,20 +152,17 @@ class _SkUiPageState extends State<SkUiPage> {
     final prefs = context.read<SettingsProvider>().prefs;
     if (prefs == null) return;
     final confirmed = await _confirm(
-      title: 'Regenerate the automation token?',
-      body:
-          'The current token stops working immediately. Every copy already '
-          'pasted elsewhere — 自由作業盤’s 「保存復元の設定 -- [979][01]」 above '
-          'all — must be updated with the new one.',
-      action: 'Regenerate',
+      title: SkStr.regenTitle.t,
+      body: SkStr.regenBody.t,
+      action: SkStr.regenerate.t,
     );
     if (!confirmed) return;
     final token = SkAutomation.regenerate(prefs);
     if (!mounted) return;
     setState(() => _automationToken = token);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('New automation token generated')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(SkStr.tokenGenerated.t)));
   }
 
   Future<void> _refreshExportStatus() async {
@@ -184,7 +184,10 @@ class _SkUiPageState extends State<SkUiPage> {
         },
       );
     } catch (e) {
-      st = SkExportStatus(dirSet: false, message: '⚠ Status check failed: $e');
+      st = SkExportStatus(
+        dirSet: false,
+        message: SkStr.statusCheckFailed.f(['$e']),
+      );
     }
     if (mounted) setState(() => _exStatus = st);
   }
@@ -214,13 +217,22 @@ class _SkUiPageState extends State<SkUiPage> {
   /// off its roles colour nothing, so only what still works is offered.
   List<SkSection> _visible(SkUiKnobs k) => k.enabled
       ? SkSection.values
-      : const [SkSection.eximport, SkSection.general, SkSection.maintenance];
+      : const [
+          SkSection.language,
+          SkSection.eximport,
+          SkSection.general,
+          SkSection.maintenance,
+        ];
 
   /// The stored order, limited to the sections shown, with any section it
-  /// does not name yet appended in its default place.
+  /// does not name yet appended in its default place. “App language” is the
+  /// exception: an order stored before the section existed gets it first —
+  /// nothing dragged it anywhere yet. Once the order names it, it stays where
+  /// it was dragged.
   List<SkSection> _order(SkUiKnobs k) {
     final visible = _visible(k);
     final order = <SkSection>[
+      if (!k.sectionOrder.contains(SkSection.language.name)) SkSection.language,
       for (final name in k.sectionOrder)
         if (SkSection.byName(name) case final s?)
           if (visible.contains(s)) s,
@@ -275,7 +287,7 @@ class _SkUiPageState extends State<SkUiPage> {
             // The link to the app's own settings: the first, thick pill. It
             // opens over this page, so Back returns here.
             SkActionRow(
-              label: 'App settings',
+              label: SkStr.appSettings.t,
               icon: Icons.settings_outlined,
               main: true,
               opens: true,
@@ -320,29 +332,34 @@ class _SkUiPageState extends State<SkUiPage> {
     }
 
     final rows = switch (s) {
+      SkSection.language => <Widget>[
+        SkActionRow(
+          label: SkStr.languageRow.f([
+            skLanguageName(context.watch<SettingsProvider>().forcedLocale),
+          ]),
+          icon: Icons.language,
+          main: true,
+          opens: true,
+          onTap: () => showSkLanguagePicker(context),
+        ),
+      ],
       SkSection.eximport => _eximportRows(p),
       SkSection.general => <Widget>[
         SkSwitchRow(
-          label: 'Use 白い熊 獲得 UI',
+          label: SkStr.useUi.t,
           icon: Icons.toggle_on_outlined,
-          note:
-              'The black-yellow look, with every colour, font and shape set '
-              'on this page. Off: the app’s own Material look, which the '
-              'colours here do not reach.',
+          note: SkStr.useUiNote.t,
           value: k.enabled,
           onChanged: (v) => commit(() => k.enabled = v),
         ),
       ],
       SkSection.foundation => <Widget>[
-        const SkNote(
-          'The twelve colours every other colour starts from. An item that '
-          'was given a colour of its own in its section keeps it.',
-        ),
+        SkNote(SkStr.foundationNote.t),
         for (final b in SkBase.values)
           SkColorRow(
             label: b.label,
             icon: skKindIcon(b.kind),
-            iconColor: p.icon(s.role),
+            iconColor: p.section(s),
             color: k.base(b),
             onChanged: (c) => commit(() => k.setBase(b, c)),
             onReset: k.base(b).toARGB32() == b.defaultArgb
@@ -352,13 +369,13 @@ class _SkUiPageState extends State<SkUiPage> {
       ],
       SkSection.text => <Widget>[
         SkActionRow(
-          label: 'Font',
+          label: SkStr.font.t,
           icon: Icons.font_download_outlined,
           opens: true,
           note: switch (k.fontFamily) {
-            '' => 'App default (Montserrat)',
-            'SystemFont' => 'System font',
-            skMonospaceFamily => 'Monospace',
+            '' => SkStr.fontDefault.t,
+            'SystemFont' => SkStr.fontSystem.t,
+            skMonospaceFamily => SkStr.fontMono.t,
             _ => k.fontFamily,
           },
           below: Text(
@@ -379,7 +396,7 @@ class _SkUiPageState extends State<SkUiPage> {
           ),
         ),
         SkSliderRow(
-          label: 'Font size',
+          label: SkStr.fontSize.t,
           icon: Icons.format_size,
           value: k.fontSizeScale,
           min: 0.5,
@@ -390,7 +407,7 @@ class _SkUiPageState extends State<SkUiPage> {
           onChangeEnd: (v) => commit(() => k.fontSizeScale = v),
         ),
         SkSliderRow(
-          label: 'Font weight',
+          label: SkStr.fontWeight.t,
           icon: Icons.format_bold,
           value: k.fontWeight,
           min: 100,
@@ -400,12 +417,12 @@ class _SkUiPageState extends State<SkUiPage> {
           onChanged: (v) => live(() => k.fontWeight = v),
           onChangeEnd: (v) => commit(() => k.fontWeight = v),
         ),
-        const SkSubgroupHeading('Colours'),
+        SkSubgroupHeading(SkStr.colours.t),
         SkRoleRows(s, level: 2),
       ],
       SkSection.icons => <Widget>[
         SkSliderRow(
-          label: 'Icon size',
+          label: SkStr.iconSize.t,
           icon: Icons.interests_outlined,
           role: SkIconRole.contact,
           value: k.iconSizeScale,
@@ -433,16 +450,13 @@ class _SkUiPageState extends State<SkUiPage> {
             ],
           ),
         ),
-        const SkSubgroupHeading('Coloured by what the row does'),
+        SkSubgroupHeading(SkStr.iconsByRole.t),
         SkRoleRows(s, level: 2),
       ],
       SkSection.shape => <Widget>[
-        const SkNote(
-          'Cards, panels, dialogs and fields. Buttons are always fully round '
-          'pills: 3 dp for the main action of a block, 1.25 dp for the rest.',
-        ),
+        SkNote(SkStr.shapeNote.t),
         SkSliderRow(
-          label: 'Corner roundness',
+          label: SkStr.cornerRoundness.t,
           icon: Icons.rounded_corner,
           value: k.cornerRadius,
           min: 0,
@@ -454,21 +468,21 @@ class _SkUiPageState extends State<SkUiPage> {
           preview: _borderPreview(k, p),
         ),
         SkSliderRow(
-          label: 'Border thickness (0 = none)',
+          label: SkStr.borderThickness.t,
           icon: Icons.line_weight,
           value: k.borderWidth,
           min: 0,
           max: 6,
           divisions: 12,
           valueText: k.borderWidth <= 0
-              ? 'none'
+              ? SkStr.none.t
               : '${k.borderWidth.toStringAsFixed(1)} dp',
           onChanged: (v) => live(() => k.borderWidth = v),
           onChangeEnd: (v) => commit(() => k.borderWidth = v),
           preview: _borderPreview(k, p),
         ),
         SkSliderRow(
-          label: 'Row spacing (0 = tightest)',
+          label: SkStr.rowSpacing.t,
           icon: Icons.format_line_spacing,
           value: k.rowSpacing,
           min: 0,
@@ -481,26 +495,22 @@ class _SkUiPageState extends State<SkUiPage> {
       ],
       SkSection.maintenance => <Widget>[
         SkActionRow(
-          label: 'Reset section order',
+          label: SkStr.resetOrder.t,
           icon: Icons.reorder,
-          note: 'Puts the sections of this page back in their first order.',
+          note: SkStr.resetOrderNote.t,
           onTap: sk.resetSectionOrder,
         ),
         if (k.enabled)
           SkActionRow(
-            label: 'Reset all colours',
+            label: SkStr.resetColours.t,
             icon: Icons.restart_alt,
             destructive: true,
-            note:
-                'Every colour back to its default: the foundation colours and '
-                'every item’s own. Fonts and shapes stay.',
+            note: SkStr.resetColoursNote.t,
             onTap: () async {
               if (await _confirm(
-                title: 'Reset all colours?',
-                body:
-                    'Every colour set on this page returns to its default. '
-                    'Fonts, shapes and the order of the sections stay.',
-                action: 'Reset',
+                title: SkStr.resetColoursTitle.t,
+                body: SkStr.resetColoursBody.t,
+                action: SkStr.reset.t,
                 destructive: true,
               )) {
                 sk.resetAllColours();
@@ -508,26 +518,27 @@ class _SkUiPageState extends State<SkUiPage> {
             },
           ),
         SkActionRow(
-          label: 'Reset everything',
+          label: SkStr.resetAll.t,
           icon: Icons.restart_alt,
           destructive: true,
-          note:
-              'All 白い熊 獲得 UI settings back to the black-yellow defaults. '
-              'Imported fonts stay available.',
+          note: SkStr.resetAllNote.t,
           onTap: () async {
             if (await _confirm(
-              title: 'Reset everything?',
-              body:
-                  'All 白い熊 獲得 UI settings return to the black-yellow '
-                  'defaults — colours, font, shapes, and the order and '
-                  'folding of this page. Imported fonts stay available.',
-              action: 'Reset',
+              title: SkStr.resetAllTitle.t,
+              body: SkStr.resetAllBody.t,
+              action: SkStr.reset.t,
               destructive: true,
             )) {
               sk.resetToDefaults();
             }
           },
         ),
+      ],
+      SkSection.page => <Widget>[
+        SkRoleRows(s, sectionIcons: false),
+        SkSubgroupHeading(SkStr.sectionIcons.t),
+        SkNote(SkStr.sectionIconsNote.t, level: 2),
+        SkRoleRows(s, level: 2, sectionIcons: true),
       ],
       // Every other section holds the colour roles of its items.
       _ => <Widget>[SkRoleRows(s)],
@@ -553,37 +564,32 @@ class _SkUiPageState extends State<SkUiPage> {
     final warn = p[SkRole.warning];
     return [
       SkActionRow(
-        label: 'Export / Import…',
+        label: SkStr.eximportOpen.t,
         icon: Icons.import_export,
         main: true,
         opens: true,
-        note:
-            'Save or restore everything by category — tracked apps and their '
-            'sources, settings, credentials, categories and this page.',
+        note: SkStr.eximportNote.t,
         onTap: _openEximportPanel,
       ),
       SkActionRow(
-        label: 'Export directory',
+        label: SkStr.exportDir.t,
         icon: Icons.folder_open,
         opens: true,
         note: st == null
             ? '…'
-            : [st.dirName ?? 'Not set — tap to choose', st.message].join('\n'),
+            : [st.dirName ?? SkStr.notSetTap.t, st.message].join('\n'),
         noteColor: (st?.dirSet ?? true) ? null : warn,
         onTap: _pickExportDir,
       ),
       SkSwitchRow(
-        label: 'Automation export',
+        label: SkStr.automationExport.t,
         icon: Icons.sync,
         value: _automationOn,
         onChanged: _setAutomation,
-        note:
-            'Sister apps may trigger this app’s export — and 白い熊 応用管理 '
-            'may back its data up and put it back on a wiped phone.',
+        note: SkStr.automationNote.t,
         below: _automationOn && !_allFilesAccess
             ? Text(
-                '⚠ No All-files access — backups land in the directory above, '
-                'ignoring the directory a task asks for.',
+                SkStr.noAllFiles.t,
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: warn),
@@ -591,21 +597,18 @@ class _SkUiPageState extends State<SkUiPage> {
             : null,
       ),
       SkSwitchRow(
-        label: 'Use authorization token?',
+        label: SkStr.useToken.t,
         icon: Icons.key,
         value: _automationRequireToken,
         onChanged: _setRequireToken,
-        note:
-            'Off: any sister app may drive the automation. On: a caller must '
-            'also present the token below. Either way, the data door checks '
-            'the caller’s package, uid and signing certificate.',
+        note: SkStr.useTokenNote.t,
       ),
       // Shown only when the token is being asked for: a 48-character secret
       // sitting under an off switch invites pasting it somewhere it will do
       // nothing.
       if (_automationRequireToken) ...[
         SkActionRow(
-          label: 'Copy the automation token',
+          label: SkStr.copyToken.t,
           icon: Icons.content_copy,
           note: _automationToken.isEmpty
               ? '…'
@@ -613,9 +616,9 @@ class _SkUiPageState extends State<SkUiPage> {
           onTap: _copyToken,
         ),
         SkActionRow(
-          label: 'Regenerate the token',
+          label: SkStr.regenToken.t,
           icon: Icons.refresh,
-          note: 'The current token stops working at once.',
+          note: SkStr.regenTokenNote.t,
           onTap: _regenerateToken,
         ),
       ],
