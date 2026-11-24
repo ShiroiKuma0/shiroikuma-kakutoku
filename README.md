@@ -15,7 +15,7 @@ trusted, and a tightened edge-to-edge main screen.
 
 Installs **side-by-side** with Obtainium (app id `shiroikuma.kakutoku`).
 
-**📥 Latest release: [`1.7.4+001`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
+**📥 Latest release: [`1.7.5+002`](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-kakutoku/releases)
 
 </div>
 
@@ -89,14 +89,21 @@ self-update still goes last and alone.
 ## 🎨 白い熊 獲得 UI — one page, folded by section
 A dedicated theming screen in the sister-repo house style, reached from the top of Settings **or by
 long-pressing the Settings cog** on the main screen. A thick **App settings** pill leads it, then an
-index of small chips — one per section. Tap a chip and its section unfolds and scrolls into view;
+index of small chips — one per section, each with its section's icon in one of seven colours that
+say what kind of thing the section is. Tap a chip and its section unfolds and scrolls into view;
 **long-press and drag** a chip and the sections reorder to match. Every section folds, and the fold
 state and the order are remembered and travel in the export. Rows that do something are pills that
 hug their label, rows that set something stay plain, and every row carries an icon coloured by what
 it does. **Everything previews live** — the whole app, and the page itself, restyles as you drag.
 
+## 🌐 App language first — and Japanese throughout
+**App language** is the first section of the UI page. Its list is short on purpose: System
+default, 日本語, English, and only the languages the app is really translated into — each row with
+its name in its own language, its country and its tag, and the current one in a pill. The whole
+fork layer is translated into Japanese, down to the name of every colour role.
+
 ## 📦 Category Export / Import
-The first section of the UI page backs up **everything** by category — **Sources (tracked apps)
+The Export / Import section of the UI page backs up **everything** by category — **Sources (tracked apps)
 first**, then app settings, source credentials, categories, and the 白い熊 獲得 UI itself (knobs,
 recent colours, and your imported font files ride along inside the export). A settable export
 directory is checked on opening for the latest export (loud red warning until one is set); **exactly

@@ -3,7 +3,84 @@
 Everything built on top of stock [Obtainium](https://github.com/ImranR98/Obtainium). Upstream's own
 notes live in the GitHub release history; this file tracks only the fork's changes.
 
-## 1.7.4+001 — current
+## 1.7.5+002 — current
+
+Base: upstream Obtainium **1.7.5** (`versionCode` 2363), fork `versionCode` `23630002`.
+
+The jump from 1.7.4 to 1.7.5, and three things of the fork's own: the app's language as the
+first section of the UI page, section icons in seven colours, and a complete Japanese
+translation. Build `1.7.5+001` carried all but the language section and was never released.
+
+**Download:** `shiroikuma-kakutoku_1.7.5+002_arm64-v8a.apk` — the signed release build for
+arm64 phones.
+
+### From upstream 1.7.5
+- An optional **refresh button** instead of pull-to-refresh; it becomes a stop button while a
+  check runs.
+- A setting to **check system-disabled apps** for updates.
+- The app opens an app's page from Android's **App info → App details**.
+- Updates are shown for pseudo-versioned apps when downgrades are hidden; a stale-only update
+  health flag reads “No update detected recently”.
+- Imports are hardened against hijacking and path traversal, and keep the tracked versions of
+  pseudo-versioned apps.
+- The root installer installs into the profile the app runs in; signing-key rotation lineages
+  are accepted when verifying an install.
+- GitHub Enterprise API URLs, paginated Forgejo / Codeberg releases, cached F-Droid indexes,
+  the updated Farsroid API, parentheses in HTML source links.
+- The internal cache is used when external storage cannot be written; app files are flushed
+  before they are renamed.
+- Flutter 3.50.1, Gradle 9.5.0, Android Gradle Plugin 9.3.1, Kotlin 2.4.20.
+
+### App language — the first section
+- **“App language” opens the 白い熊 獲得 UI page**: the first section and the first chip, a
+  globe in light blue. Its one row, “Language: …”, opens the list.
+- **The list is short**: System default, 日本語, English, then only the languages the app is
+  translated into by four fifths or more — Bosanski, Deutsch, Español, Français, Italiano,
+  Magyar, Nederlands, Português, Ελληνικά, Русский, 简体中文. The other translations stay in
+  the package, and a language chosen earlier that is no longer listed stays in force.
+- **The list has its own look**: plain rows with a ring, the name in its own language, the
+  country in dim gold and the tag in monospace at the right; only the current language sits in
+  a pill.
+- The language dropdown on the Settings screen and Android's own per-app language screen offer
+  the same short list. All three set one value.
+- An order of sections stored by an earlier build gets the new section first; once dragged, it
+  stays where it was put.
+
+### Section icons in seven colours
+- **Every section heading and its chip carry the same icon in the same colour**, and the colour
+  says what kind of thing the section is: yellow for the base and its settings, green for
+  controls, light blue for words, heavy blue for the frame and its boxes, orange where the app
+  reaches out, red for resets, rose for what flashes by.
+- **The seven colours are settable**, under This page → “Section icons of this page”.
+- **The default order alternates the colours** — no two neighbouring sections share one. An
+  order you dragged is left alone.
+- The chip's icon is sized by its label, as the heading's already was.
+
+### Icons
+- **Four icon colours changed their defaults**, away from shades that were hard to tell apart:
+  installs and updates are heavy green `#00A550`, writing and editing heavy blue `#0066FF`,
+  what is about an app or a person light blue `#00B0FF`, blocking and skipping rose `#FF3D7F`.
+  A colour you set yourself is kept.
+- **Every switch row of the Settings screen has an icon**, coloured by what the row does and
+  sized by its label — 37 rows that had none.
+
+### Japanese, in full
+- **The whole fork layer is translated.** The UI page, the Export / Import panel, every colour
+  role, section and foundation colour — about 290 strings that were English text in the code —
+  are translation keys now, with Japanese for each.
+- The fork's older strings (linked apps, commit tracking, “Set as updated”, the rebuild note)
+  have their Japanese too, and so have 17 strings that upstream's own Japanese file leaves in
+  English.
+- What stays English: the replies and names of the automation contract, which sister apps read.
+
+### Under the hood
+- `tool/sk_translations.py <tag>` rebuilds every locale from upstream's file of that tag and
+  writes `lib/sk_strings.dart`; the fork's strings live in `tool/sk_strings/en.json` and
+  `ja.json`. Other locales carry the fork's strings in English.
+- `test/sk_ui_test.dart` checks the section colours, the language list against its measure,
+  and that Japanese has every key.
+
+## 1.7.4+001
 
 Base: upstream Obtainium **1.7.4** (`versionCode` 2362), fork `versionCode` `23620001`.
 
